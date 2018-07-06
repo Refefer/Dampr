@@ -90,6 +90,10 @@ class PickledDataset(Dataset):
     def delete(self):
         os.unlink(self.path)
 
+    def __str__(self):
+        return 'PickledDataset[path={}]'.format(self.path)
+    __repr__ = __str__
+
 class PickledDatasetWriter(DatasetWriter):
     def __init__(self, name, splitter, n_partitions, buffer_size=10000):
         super(PickledDatasetWriter, self).__init__(name)
@@ -129,8 +133,8 @@ class PickledDatasetWriter(DatasetWriter):
             self.flush(nidx)
 
     def finished(self):
-        for nidx in range(self.n_partitions):
-            if len(self.buffers[nidx]) > 0:
+        for nidx, buffer in self.buffers.items():
+            if len(buffer) > 0:
                 self.flush(nidx)
 
         return self.files
@@ -237,10 +241,34 @@ class Reduce(Reducer):
         for k, vs in self.yield_groups(datasets[0]):
             yield k, self.reducer(k, vs)
 
+class Join(Reducer):
+    def __init__(self, joiner_f):
+        self.joiner_f = joiner_f
+
+    def reduce(self, d1, d2):
+        g1 = self.yield_groups(d1)
+        g2 = self.yield_groups(d2)
+        left, right = next(g1, None), next(g2, None)
+        while left is not None and right is not None:
+            if left[0] < right[0]:
+                left = next(g1, None)
+            elif left[0] > right[0]:
+                right = next(g2, None)
+            else:
+                k = left[0]
+                yield k, self.joiner_f(k, left[1], right[1])
+                left, right = next(g1, None), next(g2, None)
+
+def Filter(predicate):
+    def _f(key, value):
+        if predicate(key, value):
+            yield key, value
+
+    return Map(_f)
+
 def EZMap(f):
     return Map(f)
 
 def EZReduce(f):
     return Reduce(f)
-
 

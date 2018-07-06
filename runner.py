@@ -17,6 +17,11 @@ class Input(object):
     def __eq__(self, other):
         return self.name == other.name
 
+    def __str__(self):
+        return "Input[name={}]".format(self.name)
+
+    __repr__ = __str__
+
 class Graph(object):
     def __init__(self):
         self.inputs = {}
@@ -24,7 +29,7 @@ class Graph(object):
         self.stages = []
 
     def add_input(self, dataset):
-        inp = Input('Input:%s'. format(len(self.inputs)))
+        inp = Input('Input:{}'. format(len(self.inputs)))
         self.inputs[inp] = dataset
         return inp
 
@@ -42,13 +47,10 @@ class Graph(object):
         self.outputs.append(name)
 
 class RunnerBase(object):
-    def __init__(self, graph, 
-            n_maps=CPUS,
-            n_reducers=CPUS):
+    def __init__(self, name, graph):
 
+        self.name = name
         self.graph = graph
-        self.n_maps = n_maps
-        self.n_reducers = n_reducers
 
     def run_map(self, stage_id, data, mapper):
         raise NotImplementedError()
@@ -78,6 +80,8 @@ class RunnerBase(object):
 
             elif isinstance(func, Reducer):
                 data_mapping = self.run_reducer(stage_id, input_data, func)
+            else:
+                raise TypeError("Unknown type")
 
             assert isinstance(data_mapping, dict)
             data[output] = data_mapping
@@ -85,7 +89,7 @@ class RunnerBase(object):
 
         ret = []
         for output in self.graph.outputs:
-            cd = CatDataset([v for vs in data[output].values() for v in vs])
+            cd = MergeDataset([v for vs in data[output].values() for v in vs])
             ret.append(cd)
             to_delete.remove(output)
 
@@ -98,13 +102,28 @@ class RunnerBase(object):
 
 class SimpleRunner(RunnerBase):
 
+    def _gen_dw_name(self, stage_id, suffix):
+        return '/tmp/{}_stage_{}_{}'.format(self.name, stage_id, suffix) 
+
+    # Collect across inputs
+    def transpose_dms(self, data_mappings):
+        transpose = {}
+        for dm in data_mappings:
+            for key_id, datasets in dm.items():
+                if key_id not in transpose:
+                    transpose[key_id] = []
+
+                transpose[key_id].append(datasets)
+
+        return transpose
+
     def run_map(self, stage_id, data_mappings, mapper):
         # if we get more than two input mappings, we only iterate over the first one
         iter_dm = data_mappings[0]
         if not isinstance(iter_dm, Chunker):
             iter_dm = DMChunker(iter_dm)
 
-        dw = PickledDatasetWriter('/tmp/stage_{}_map'.format(stage_id), Splitter(), 1)
+        dw = PickledDatasetWriter(self._gen_dw_name(stage_id, 'map'), Splitter(), 1)
         dw.start()
         for chunk in iter_dm.chunks():
             for k, v in mapper.map(chunk, *data_mappings[1:]):
@@ -113,7 +132,7 @@ class SimpleRunner(RunnerBase):
         return dw.finished()
 
     def run_reducer(self, stage_id, data_mappings, reducer):
-        dw = ChunkedPickledDatasetWriter('/tmp/stage_{}_reduce'.format(stage_id))
+        dw = ChunkedPickledDatasetWriter(self._gen_dw_name(stage_id, 'red'))
         dw.start()
         for r_idx in data_mappings[0].keys():
             datasets = [dm[r_idx] for dm in data_mappings]
@@ -148,13 +167,29 @@ def mr_reduce(in_q, out_q, reducer, dw):
     out_q.put(dw.finished())
 
 class MTRunner(SimpleRunner):
+    def __init__(self, name, graph, n_maps=CPUS, n_reducers=CPUS):
+        super(MTRunner, self).__init__(name, graph)
+        self.n_maps = n_maps
+        self.n_reducers = n_reducers
+
+    def _collapse_output(self, input_q, output_q, procs):
+        for _ in range(len(procs)):
+            input_q.put(None)
+
+        res = []
+        for p in procs:
+            p.join()
+            res.append(output_q.get())
+
+        return self.collapse_datamappings(res)
+
     def run_map(self, stage_id, data_mappings, mapper):
         input_q = SimpleQueue()
         output_q = SimpleQueue()
         mappers = []
         for m_id in range(self.n_maps):
-            dw = PickledDatasetWriter('/tmp/stage_{}_map.{}'.format(stage_id, m_id), 
-                    Splitter(), self.n_reducers)
+            dw = PickledDatasetWriter(self._gen_dw_name(stage_id, 'map.{}'.format(m_id)),
+                    Splitter(), 1)
 
             mappers.append(multiprocessing.Process(target=mr_map,
                 args=(input_q, output_q, mapper, dw)))
@@ -169,15 +204,7 @@ class MTRunner(SimpleRunner):
         for chunk in iter_dm.chunks():
             input_q.put((chunk, data_mappings[1:]))
         
-        for _ in range(self.n_maps):
-            input_q.put(None)
-
-        res = []
-        for m in mappers:
-            m.join()
-            res.append(output_q.get())
-
-        return self.collapse_datamappings(res)
+        return self._collapse_output(input_q, output_q, mappers)
 
     def run_reducer(self, stage_id, data_mappings, reducer):
         input_q = SimpleQueue()
@@ -185,8 +212,8 @@ class MTRunner(SimpleRunner):
         reducers = []
         for r_id in range(self.n_reducers):
             dw = ChunkedPickledDatasetWriter(
-                    '/tmp/stage_{}_map.{}'.format(stage_id, r_id)
-            ) 
+                self._gen_dw_name(stage_id, 'red.{}'.format(r_id))
+            )
             reducers.append(multiprocessing.Process(target=mr_reduce,
                 args=(input_q, output_q, reducer, dw)))
 
@@ -204,12 +231,4 @@ class MTRunner(SimpleRunner):
         for key_id, dms in transpose.items():
             input_q.put(dms)
 
-        for _ in range(self.n_reducers):
-            input_q.put(None)
-
-        res = []
-        for r in reducers:
-            r.join()
-            res.append(output_q.get())
-
-        return self.collapse_datamappings(res)
+        return self._collapse_output(input_q, output_q, reducers)

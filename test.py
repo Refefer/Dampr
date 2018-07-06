@@ -1,28 +1,48 @@
+import json
 import sys
 
 from base import EZMap, EZReduce, TextInput
 from runner import MTRunner, SimpleRunner, Graph
+from utils import first
 
 @EZMap
-def split(k, line):
-    yield len(line.split()), (1, len(line))
+def extract_listings(k, line):
+    data = json.loads(line)
+    yield data['listingId1'], data['listing1']
+    yield data['listingId2'], data['listing2']
+
+@EZMap
+def split(k, doc):
+    for tag in doc['tags'].lower().split('.'):
+        for w in tag.split():
+            yield w, doc['price']
 
 @EZReduce
 def count(key, it):
-    lc, bc = 0, 0
-    for lines, bytes in it:
-        lc += lines
-        bc += bytes
+    s = c = 0
+    for price in it:
+        c += 1
+        s += price
 
-    return lc, bc
+    return s, c 
+
+@EZMap
+def sort_values(key, value):
+    s, c = value
+    if c > 10:
+        yield s / float(c), (s, c, key)
 
 def main(fname):
     graph = Graph()
-    inp = graph.add_input(TextInput(fname))
-    out = graph.add_mapper([inp], split)
+    out = graph.add_input(TextInput(fname))
+
+    listings = graph.add_mapper([out], extract_listings)
+    out = graph.add_reducer([listings], first())
+    out = graph.add_mapper([out], split)
     out = graph.add_reducer([out], count)
+    out = graph.add_mapper([out], sort_values)
     graph.add_output(out)
-    runner = MTRunner(graph)
+    runner = MTRunner('top-query-words', graph)
     results = runner.run()[0]
     for k, v in results.read():
         print k, v
