@@ -1,3 +1,4 @@
+import logging
 import multiprocessing
 from multiprocessing.queues import SimpleQueue
 import tempfile
@@ -7,7 +8,7 @@ from base import *
 CPUS = multiprocessing.cpu_count()
 
 
-class Input(object):
+class Source(object):
     def __init__(self, name):
         self.name = name
 
@@ -18,7 +19,7 @@ class Input(object):
         return self.name == other.name
 
     def __str__(self):
-        return "Input[name={}]".format(self.name)
+        return "Source[name={}]".format(self.name)
 
     __repr__ = __str__
 
@@ -29,17 +30,17 @@ class Graph(object):
         self.stages = []
 
     def add_input(self, dataset):
-        inp = Input('Input:{}'. format(len(self.inputs)))
+        inp = Source('Input:{}'. format(len(self.inputs)))
         self.inputs[inp] = dataset
         return inp
 
     def add_mapper(self, inputs, mapper):
-        inp = Input('Map: {}'.format(len(self.stages)))
+        inp = Source('Map: {}'.format(len(self.stages)))
         self.stages.append((inp, inputs, mapper))
         return inp
 
     def add_reducer(self, inputs, reducer):
-        inp = Input('Reduce: {}'.format(len(self.stages)))
+        inp = Source('Reduce: {}'.format(len(self.stages)))
         self.stages.append((inp, inputs, reducer))
         return inp
 
@@ -74,7 +75,15 @@ class RunnerBase(object):
         to_delete = set()
         splitter = Splitter()
         for stage_id, (output, inputs, func) in enumerate(self.graph.stages):
+            logging.info("Starting stage %s/%s", stage_id, len(self.graph.stages))
+            logging.info("Function - %s", type(func))
             input_data = [data[i] for i in inputs]
+            for i, id in enumerate(input_data):
+                logging.info("Source: %s", inputs[i])
+                logging.debug("Source Datasets: %s", id)
+
+            logging.info("Output: %s", output)
+
             if isinstance(func, Mapper):
                 data_mapping = self.run_map(stage_id, input_data, func)
 
@@ -167,10 +176,14 @@ def mr_reduce(in_q, out_q, reducer, dw):
     out_q.put(dw.finished())
 
 class MTRunner(SimpleRunner):
-    def __init__(self, name, graph, n_maps=CPUS, n_reducers=CPUS):
+    def __init__(self, name, graph, 
+            n_maps=CPUS, 
+            n_reducers=CPUS,
+            n_partitions=200):
         super(MTRunner, self).__init__(name, graph)
         self.n_maps = n_maps
         self.n_reducers = n_reducers
+        self.n_partitions = n_partitions
 
     def _collapse_output(self, input_q, output_q, procs):
         for _ in range(len(procs)):
@@ -189,7 +202,7 @@ class MTRunner(SimpleRunner):
         mappers = []
         for m_id in range(self.n_maps):
             dw = PickledDatasetWriter(self._gen_dw_name(stage_id, 'map.{}'.format(m_id)),
-                    Splitter(), 1)
+                    Splitter(), self.n_reducers)
 
             mappers.append(multiprocessing.Process(target=mr_map,
                 args=(input_q, output_q, mapper, dw)))

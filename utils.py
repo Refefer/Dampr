@@ -14,6 +14,7 @@ def dedup(f=lambda x: x):
         for v in value:
             fv = f(v)
             if fv not in seen:
+                seen.add(fv)
                 agg.append(v)
 
         return agg
