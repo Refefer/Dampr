@@ -6,20 +6,6 @@ from base import *
 
 CPUS = multiprocessing.cpu_count()
 
-def mr_map(in_q, out_q, mapper, dw, sentinel):
-    dw.start()
-    for datasets in iter(in_q, sentinel):
-        for k, v in mapper.map(*datasets):
-            dw.add_record(k, v)
-
-    out_q.put(dw.finished())
-
-def mr_reduce(out_q, datasets, reducer, dw):
-    dw.start()
-    for k, v in reducer.reduce(*datasets):
-        dw.add_record(k, v)
-
-    out_q.put(dw.finished())
 
 class Input(object):
     def __init__(self, name):
@@ -73,7 +59,7 @@ class RunnerBase(object):
     def collapse_datamappings(self, data_mappings):
         new_data = {}
         for dm in data_mappings:
-            for partition, datasets in data_mappings:
+            for partition, datasets in dm.items():
                 if partition not in new_data:
                     new_data[partition] = []
 
@@ -83,6 +69,7 @@ class RunnerBase(object):
 
     def run(self):
         data = self.graph.inputs.copy()
+        to_delete = set()
         splitter = Splitter()
         for stage_id, (output, inputs, func) in enumerate(self.graph.stages):
             input_data = [data[i] for i in inputs]
@@ -94,10 +81,18 @@ class RunnerBase(object):
 
             assert isinstance(data_mapping, dict)
             data[output] = data_mapping
+            to_delete.add(output)
 
         ret = []
         for output in self.graph.outputs:
-            ret.append(CatDataset([v for vs in data[output].values() for v in vs]))
+            cd = CatDataset([v for vs in data[output].values() for v in vs])
+            ret.append(cd)
+            to_delete.remove(output)
+
+        for sd in to_delete:
+            for ds in data[sd].values():
+                for d in ds:
+                    d.delete()
 
         return ret
 
@@ -127,15 +122,94 @@ class SimpleRunner(RunnerBase):
 
         return dw.finished()
 
-#class MTRunner(RunnerBase):
-#    def run_map(self, data_mappings, mapper):
-#        dw = PickledDatasetWriter('/tmp/stage_{}'.format(i), splitter, self.n_reducers)
-#        input_q = SimpleQueue()
-#        output_q = SimpleQueue()
-#        sentinel = object()
-#        mappers = [multiprocessing.Process(target=map, 
-#            args=(input_q, output_q, mapper, dw, sentinel)) for _ in range(self.n_maps)]
-#
-#        for m in mappers:
-#            m.start()
-#
+def mr_map(in_q, out_q, mapper, dw):
+    dw.start()
+    while True:
+        datasets = in_q.get()
+        if datasets is None:
+            break
+
+        main, supplemental = datasets
+        for k, v in mapper.map(main, *supplemental):
+            dw.add_record(k, v)
+
+    out_q.put(dw.finished())
+
+def mr_reduce(in_q, out_q, reducer, dw):
+    dw.start()
+    while True:
+        datasets = in_q.get()
+        if datasets is None:
+            break
+
+        for k, v in reducer.reduce(*datasets):
+            dw.add_record(k, v)
+
+    out_q.put(dw.finished())
+
+class MTRunner(SimpleRunner):
+    def run_map(self, stage_id, data_mappings, mapper):
+        input_q = SimpleQueue()
+        output_q = SimpleQueue()
+        mappers = []
+        for m_id in range(self.n_maps):
+            dw = PickledDatasetWriter('/tmp/stage_{}_map.{}'.format(stage_id, m_id), 
+                    Splitter(), self.n_reducers)
+
+            mappers.append(multiprocessing.Process(target=mr_map,
+                args=(input_q, output_q, mapper, dw)))
+
+            mappers[-1].start()
+
+        # if we get more than two input mappings, we only iterate over the first one
+        iter_dm = data_mappings[0]
+        if not isinstance(iter_dm, Chunker):
+            iter_dm = DMChunker(iter_dm)
+        
+        for chunk in iter_dm.chunks():
+            input_q.put((chunk, data_mappings[1:]))
+        
+        for _ in range(self.n_maps):
+            input_q.put(None)
+
+        res = []
+        for m in mappers:
+            m.join()
+            res.append(output_q.get())
+
+        return self.collapse_datamappings(res)
+
+    def run_reducer(self, stage_id, data_mappings, reducer):
+        input_q = SimpleQueue()
+        output_q = SimpleQueue()
+        reducers = []
+        for r_id in range(self.n_reducers):
+            dw = ChunkedPickledDatasetWriter(
+                    '/tmp/stage_{}_map.{}'.format(stage_id, r_id)
+            ) 
+            reducers.append(multiprocessing.Process(target=mr_reduce,
+                args=(input_q, output_q, reducer, dw)))
+
+            reducers[-1].start()
+
+        # Collect across inputs
+        transpose = {}
+        for dm in data_mappings:
+            for key_id, datasets in dm.items():
+                if key_id not in transpose:
+                    transpose[key_id] = []
+
+                transpose[key_id].append(datasets)
+        
+        for key_id, dms in transpose.items():
+            input_q.put(dms)
+
+        for _ in range(self.n_reducers):
+            input_q.put(None)
+
+        res = []
+        for r in reducers:
+            r.join()
+            res.append(output_q.get())
+
+        return self.collapse_datamappings(res)

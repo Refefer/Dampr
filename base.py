@@ -11,6 +11,9 @@ class Dataset(object):
     def read(self):
         raise NotImplementedError()
 
+    def delete(self):
+        raise NotImplementedError()
+
 class Chunker(object):
     def chunks(self):
         raise NotImplementedError()
@@ -49,6 +52,9 @@ class TextLineDataset(Dataset):
     def __str__(self):
         return "Text[path={},start={},end={}]".format(self.path,self.start, self.end)
 
+    def delete(self):
+        pass
+
 class DMChunker(Chunker):
     def __init__(self, data_mapping):
         self.dm = data_mapping
@@ -80,6 +86,9 @@ class PickledDataset(Dataset):
             n_records = cPickle.load(f)
             for _ in range(n_records):
                 yield cPickle.load(f)
+
+    def delete(self):
+        os.unlink(self.path)
 
 class PickledDatasetWriter(DatasetWriter):
     def __init__(self, name, splitter, n_partitions, buffer_size=10000):
@@ -169,6 +178,10 @@ class CatDataset(Dataset):
             for x in ds.read():
                 yield x
 
+    def delete(self):
+        for d in self.datasets:
+            d.delete()
+
 class MergeDataset(Dataset):
     def __init__(self, datasets):
         self.datasets = datasets
@@ -176,6 +189,10 @@ class MergeDataset(Dataset):
     def read(self):
         its = [ds.read() for ds in self.datasets]
         return heapq.merge(*its)
+
+    def delete(self):
+        for d in self.datasets:
+            d.delete()
 
 class Mapper(object):
     def map(self, *datasets):

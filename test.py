@@ -1,7 +1,7 @@
 import sys
 
 from base import EZMap, EZReduce, TextInput
-from runner import SimpleRunner, Graph
+from runner import MTRunner, SimpleRunner, Graph
 
 @EZMap
 def split(k, line):
@@ -22,7 +22,7 @@ def main(fname):
     out = graph.add_mapper([inp], split)
     out = graph.add_reducer([out], count)
     graph.add_output(out)
-    runner = SimpleRunner(graph)
+    runner = MTRunner(graph)
     results = runner.run()[0]
     for k, v in results.read():
         print k, v
