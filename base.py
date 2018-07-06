@@ -220,14 +220,15 @@ class Reducer(object):
         raise NotImplementedError()
 
     def yield_groups(self, dataset):
-        if len(dataset) > 1:
-            dataset = MergeDataset(dataset)
-        else:
-            dataset = dataset[0]
+        if len(dataset) > 0:
+            if len(dataset) > 1:
+                dataset = MergeDataset(dataset)
+            else:
+                dataset = dataset[0]
 
-        for key, group in itertools.groupby(dataset.read(), key=lambda x: x[0]):
-            it = (kv[1] for kv in group)
-            yield key, it
+            for key, group in itertools.groupby(dataset.read(), key=lambda x: x[0]):
+                it = (kv[1] for kv in group)
+                yield key, it
 
 class Reduce(Reducer):
     """
@@ -265,10 +266,4 @@ def Filter(predicate):
             yield key, value
 
     return Map(_f)
-
-def EZMap(f):
-    return Map(f)
-
-def EZReduce(f):
-    return Reduce(f)
 

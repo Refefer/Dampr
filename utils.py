@@ -24,3 +24,9 @@ def dedup(f=lambda x: x):
 def first():
     return Reduce(lambda k, v: next(v))
 
+def swap():
+    def _f(k, v):
+        yield v, k
+
+    return Map(_f)
+

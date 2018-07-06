@@ -19,14 +19,13 @@ class Source(object):
         return self.name == other.name
 
     def __str__(self):
-        return "Source[name={}]".format(self.name)
+        return "Source[name=`{}`]".format(self.name)
 
     __repr__ = __str__
 
 class Graph(object):
     def __init__(self):
         self.inputs = {}
-        self.outputs = []
         self.stages = []
 
     def add_input(self, dataset):
@@ -34,18 +33,25 @@ class Graph(object):
         self.inputs[inp] = dataset
         return inp
 
-    def add_mapper(self, inputs, mapper):
-        inp = Source('Map: {}'.format(len(self.stages)))
+    def add_mapper(self, inputs, mapper, name=None):
+        assert isinstance(mapper, Mapper)
+        assert all(isinstance(inp, Source) for inp in inputs)
+        if name is None:
+            name = 'Map: {}'
+
+        inp = Source(name.format(len(self.stages)))
         self.stages.append((inp, inputs, mapper))
         return inp
 
-    def add_reducer(self, inputs, reducer):
-        inp = Source('Reduce: {}'.format(len(self.stages)))
+    def add_reducer(self, inputs, reducer, name=None):
+        assert isinstance(reducer, Reducer)
+        assert all(isinstance(inp, Source) for inp in inputs)
+        if name is None:
+            name = 'Reduce: {}'
+            
+        inp = Source(name.format(len(self.stages)))
         self.stages.append((inp, inputs, reducer))
         return inp
-
-    def add_output(self, name):
-        self.outputs.append(name)
 
 class RunnerBase(object):
     def __init__(self, name, graph):
@@ -70,11 +76,11 @@ class RunnerBase(object):
 
         return new_data
 
-    def run(self):
+    def run(self, outputs):
         data = self.graph.inputs.copy()
         to_delete = set()
         splitter = Splitter()
-        for stage_id, (output, inputs, func) in enumerate(self.graph.stages):
+        for stage_id, (source, inputs, func) in enumerate(self.graph.stages):
             logging.info("Starting stage %s/%s", stage_id, len(self.graph.stages))
             logging.info("Function - %s", type(func))
             input_data = [data[i] for i in inputs]
@@ -82,7 +88,7 @@ class RunnerBase(object):
                 logging.info("Source: %s", inputs[i])
                 logging.debug("Source Datasets: %s", id)
 
-            logging.info("Output: %s", output)
+            logging.info("Output: %s", source)
 
             if isinstance(func, Mapper):
                 data_mapping = self.run_map(stage_id, input_data, func)
@@ -93,14 +99,14 @@ class RunnerBase(object):
                 raise TypeError("Unknown type")
 
             assert isinstance(data_mapping, dict)
-            data[output] = data_mapping
-            to_delete.add(output)
+            data[source] = data_mapping
+            to_delete.add(source)
 
         ret = []
-        for output in self.graph.outputs:
-            cd = MergeDataset([v for vs in data[output].values() for v in vs])
+        for source in outputs:
+            cd = MergeDataset([v for vs in data[source].values() for v in vs])
             ret.append(cd)
-            to_delete.remove(output)
+            to_delete.remove(source)
 
         for sd in to_delete:
             for ds in data[sd].values():
@@ -170,6 +176,7 @@ def mr_reduce(in_q, out_q, reducer, dw):
         if datasets is None:
             break
 
+        logging.debug("Datasets received: %s", datasets)
         for k, v in reducer.reduce(*datasets):
             dw.add_record(k, v)
 
@@ -224,9 +231,9 @@ class MTRunner(SimpleRunner):
         output_q = SimpleQueue()
         reducers = []
         for r_id in range(self.n_reducers):
-            dw = ChunkedPickledDatasetWriter(
-                self._gen_dw_name(stage_id, 'red.{}'.format(r_id))
-            )
+            dw = PickledDatasetWriter(self._gen_dw_name(stage_id, 'red.{}'.format(r_id)),
+                    Splitter(), self.n_reducers)
+
             reducers.append(multiprocessing.Process(target=mr_reduce,
                 args=(input_q, output_q, reducer, dw)))
 
