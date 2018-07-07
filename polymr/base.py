@@ -1,7 +1,20 @@
+import sys
 import os
 import itertools
-import cPickle
 import heapq
+
+PY_MAJOR = sys.version_info.major
+
+try:
+    import cPickle as pickle
+
+    def dump_pickle(obj, f):
+        pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
+
+except ImportError:
+    import pickle
+
+    dump_pickle = pickle.dump
 
 class Splitter(object):
     def partition(self, key, n_partitions):
@@ -82,10 +95,10 @@ class PickledDataset(Dataset):
         self.path = path
 
     def read(self):
-        with open(self.path) as f:
-            n_records = cPickle.load(f)
+        with open(self.path, 'rb') as f:
+            n_records = pickle.load(f)
             for _ in range(n_records):
-                yield cPickle.load(f)
+                yield pickle.load(f)
 
     def delete(self):
         os.unlink(self.path)
@@ -110,10 +123,10 @@ class PickledDatasetWriter(DatasetWriter):
 
     def write_batch(self, i, buf):
         name = '{}.{}'.format(self.name, i)
-        with open(name, 'w') as f:
-            cPickle.dump(len(buf), f, cPickle.HIGHEST_PROTOCOL)
+        with open(name, 'wb') as f:
+            dump_pickle(len(buf), f)
             for d in buf:
-                cPickle.dump(d, f, cPickle.HIGHEST_PROTOCOL)
+                dump_pickle(d, f)
 
         return name
 
@@ -139,40 +152,6 @@ class PickledDatasetWriter(DatasetWriter):
 
         return self.files
 
-class ChunkedPickledDatasetWriter(DatasetWriter):
-    def __init__(self, name, buffer_size=10000):
-        super(ChunkedPickledDatasetWriter, self).__init__(name)
-        self.buffer_size = buffer_size
-
-    def start(self):
-        self.files = []
-        self.buffer = []
-
-    def write_batch(self, i, buf):
-        name = '{}.{}'.format(self.name, i)
-        with open(name, 'w') as f:
-            cPickle.dump(len(buf), f, cPickle.HIGHEST_PROTOCOL)
-            for d in buf:
-                cPickle.dump(d, f, cPickle.HIGHEST_PROTOCOL)
-
-        return name
-
-    def flush(self):
-        name = self.write_batch(len(self.files), self.buffer)
-        self.files.append(PickledDataset(name))
-        del self.buffer[:]
-
-    def add_record(self, key, value):
-        self.buffer.append((key, value))
-        if len(self.buffer) > self.buffer_size:
-            self.flush()
-
-    def finished(self):
-        if len(self.buffer) > 0:
-            self.flush()
-
-        return {0: self.files}
-
 class CatDataset(Dataset):
     def __init__(self, datasets):
         self.datasets = datasets
@@ -192,6 +171,9 @@ class MergeDataset(Dataset):
 
     def read(self):
         its = [ds.read() for ds in self.datasets]
+        if PY_MAJOR == 3:
+            return heapq.merge(*its, key=lambda x: x[0])
+
         return heapq.merge(*its)
 
     def delete(self):

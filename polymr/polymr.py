@@ -5,8 +5,8 @@ import itertools
 import json
 import random
 
-from base import Mapper, Map, Reduce, Join, TextInput
-from runner import MTRunner, Graph, Source
+from .base import Mapper, Map, Reduce, Join, TextInput
+from .runner import MTRunner, Graph, Source
 
 class PBase(object):
     def __init__(self, source, pmer):
@@ -73,10 +73,14 @@ class PMap(PBase):
 
     def group_by(self, key, vf=lambda x: x):
         def _group_by(_key, value):
-            keys = key(value)
-            if not isinstance(keys, collections.Iterable) and not isinstance(keys, basestring):
-                keys = iter((keys,))
+            yield key(value), vf(value)
 
+        pm = self._add_map(_group_by).checkpoint()
+        return PReduce(pm.source, self.pmer)
+
+    def group_bys(self, key, vf=lambda x: x):
+        def _group_bys(_key, value):
+            keys = key(value)
             for k in keys:
                 yield k, vf(value)
 

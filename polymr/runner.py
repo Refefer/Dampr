@@ -1,9 +1,9 @@
 import logging
 import multiprocessing
-from multiprocessing.queues import SimpleQueue
+from multiprocessing import Queue
 import tempfile
 
-from base import *
+from .base import *
 
 CPUS = multiprocessing.cpu_count()
 
@@ -147,7 +147,7 @@ class SimpleRunner(RunnerBase):
         return dw.finished()
 
     def run_reducer(self, stage_id, data_mappings, reducer):
-        dw = ChunkedPickledDatasetWriter(self._gen_dw_name(stage_id, 'red'))
+        dw = PickledDatasetWriter(self._gen_dw_name(stage_id, 'red'), Splitter(), 1)
         dw.start()
         for r_idx in data_mappings[0].keys():
             datasets = [dm[r_idx] for dm in data_mappings]
@@ -204,8 +204,8 @@ class MTRunner(SimpleRunner):
         return self.collapse_datamappings(res)
 
     def run_map(self, stage_id, data_mappings, mapper):
-        input_q = SimpleQueue()
-        output_q = SimpleQueue()
+        input_q = Queue()
+        output_q = Queue()
         mappers = []
         for m_id in range(self.n_maps):
             dw = PickledDatasetWriter(self._gen_dw_name(stage_id, 'map.{}'.format(m_id)),
@@ -227,8 +227,8 @@ class MTRunner(SimpleRunner):
         return self._collapse_output(input_q, output_q, mappers)
 
     def run_reducer(self, stage_id, data_mappings, reducer):
-        input_q = SimpleQueue()
-        output_q = SimpleQueue()
+        input_q = Queue()
+        output_q = Queue()
         reducers = []
         for r_id in range(self.n_reducers):
             dw = PickledDatasetWriter(self._gen_dw_name(stage_id, 'red.{}'.format(r_id)),

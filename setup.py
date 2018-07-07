@@ -14,6 +14,6 @@ setup(
     packages=find_packages(BASE),
     scripts=[],
     install_requires=[
-        # See requirements.txt
+        "six"
     ],
     author='Andrew Stanton')
