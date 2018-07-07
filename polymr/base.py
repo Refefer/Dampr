@@ -27,6 +27,9 @@ class Dataset(object):
     def delete(self):
         raise NotImplementedError()
 
+    def __iter__(self):
+        return self.read()
+
 class Chunker(object):
     def chunks(self):
         raise NotImplementedError()
@@ -43,6 +46,15 @@ class TextInput(Chunker):
             yield TextLineDataset(self.path, offset, offset + self.chunk_size)
             offset += self.chunk_size
 
+class MemoryInput(Chunker):
+    def __init__(self, items, chunk_size=1000):
+        self.items = items
+        self.chunk_size = chunk_size
+
+    def chunks(self):
+        for start in range(0, len(self.items), self.chunk_size):
+            yield MemoryDataset(self.items[start:start+self.chunk_size])
+
 class TextLineDataset(Dataset):
     def __init__(self, path, start=0, end=None):
         self.path = path
@@ -57,7 +69,7 @@ class TextLineDataset(Dataset):
                 cur_pos += len(f.readline())
 
             for i, line in enumerate(f):
-                yield i, line
+                yield self.start + i, line
                 cur_pos += len(line)
                 if self.end is not None and cur_pos > self.end:
                     break
@@ -179,6 +191,17 @@ class MergeDataset(Dataset):
     def delete(self):
         for d in self.datasets:
             d.delete()
+
+class MemoryDataset(Dataset):
+    def __init__(self, kvs):
+        self.kvs = kvs
+
+    def read(self):
+        for k, v in self.kvs:
+            yield k, v
+
+    def delete(self):
+        pass
 
 class Mapper(object):
     def map(self, *datasets):

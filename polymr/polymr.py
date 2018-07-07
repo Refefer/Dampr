@@ -5,7 +5,7 @@ import itertools
 import json
 import random
 
-from .base import Mapper, Map, Reduce, Join, TextInput
+from .base import Mapper, Map, Reduce, Join, TextInput, MemoryInput
 from .runner import MTRunner, Graph, Source
 
 class PBase(object):
@@ -84,15 +84,15 @@ class PMap(PBase):
             for k in keys:
                 yield k, vf(value)
 
-        pm = self._add_map(_group_by).checkpoint()
+        pm = self._add_map(_group_bys).checkpoint()
         return PReduce(pm.source, self.pmer)
 
     def sort_by(self, key):
-        def _sb(key, value):
+        def _sort_by(_key, value):
             v = key(value)
             yield v, value
 
-        pm = self._add_map(_fm).checkpoint()
+        pm = self._add_map(_sort_by).checkpoint()
         return PReduce(pm.source, self.pmer)
 
     def join(self, other):
@@ -174,11 +174,17 @@ class Polymr(object):
     def __init__(self, graph=None, runner=None):
         if graph is None:
             graph = Graph()
+
         self.graph = graph 
         if runner is None:
             runner = MTRunner
 
         self.runner = runner
+
+    def memory(self, items):
+        mi = MemoryInput(list(enumerate(items)))
+        source = self.graph.add_input(mi)
+        return PMap(source, self)
 
     def text(self, fname):
         source = self.graph.add_input(TextInput(fname))

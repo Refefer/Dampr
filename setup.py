@@ -12,6 +12,7 @@ setup(
     description="Pure MapReduce implementation in Python",
     url="https://www.github.com/Refefer/Polymr",
     packages=find_packages(BASE),
+    test_suite="tests",
     scripts=[],
     install_requires=[
         "six"

@@ -102,12 +102,22 @@ class RunnerBase(object):
             data[source] = data_mapping
             to_delete.add(source)
 
+        # Collect the outputs and determine what to delete
         ret = []
         for source in outputs:
-            cd = MergeDataset([v for vs in data[source].values() for v in vs])
-            ret.append(cd)
-            to_delete.remove(source)
+            dataset = data[source]
+            if isinstance(dataset, Dataset):
+                cd = source
+            elif isinstance(dataset, Chunker):
+                cd = MergeDataset(list(dataset.chunks()))
+            else:
+                cd = MergeDataset([v for vs in dataset.values() for v in vs])
 
+            ret.append(cd)
+            if source in to_delete:
+                to_delete.remove(source)
+
+        # Cleanup
         for sd in to_delete:
             for ds in data[sd].values():
                 for d in ds:
