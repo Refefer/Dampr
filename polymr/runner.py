@@ -2,6 +2,7 @@ import os
 import logging
 import multiprocessing
 from multiprocessing import Queue
+from multiprocessing.queues import Empty
 import tempfile
 
 from .base import *
@@ -214,12 +215,19 @@ class MTRunner(SimpleRunner):
         self.n_partitions = n_partitions
 
     def _collapse_output(self, input_q, output_q, procs):
+        # Add end sentinel
         for _ in range(len(procs)):
             input_q.put(None)
 
         res = []
         for _ in range(len(procs)):
-            res.append(output_q.get())
+            while True:
+                try:
+                    res.append(output_q.get(timeout=0.01))
+                    break
+                except Empty:
+                    pass
+
 
         for p in procs:
             p.join()
