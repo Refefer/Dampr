@@ -36,7 +36,7 @@ class Chunker(object):
         raise NotImplementedError()
 
 class TextInput(Chunker):
-    def __init__(self, path, chunk_size=1*1024**2):
+    def __init__(self, path, chunk_size=64*1024**2):
         self.path = path
         self.chunk_size = chunk_size
 

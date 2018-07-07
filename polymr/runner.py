@@ -178,31 +178,38 @@ class SimpleRunner(RunnerBase):
 
         return dw.finished()
 
-def mr_map(in_q, out_q, mapper, dw):
+def mr_map(w_id, in_q, out_q, mapper, dw):
     dw.start()
     while True:
         datasets = in_q.get()
         if datasets is None:
             break
 
-        main, supplemental = datasets
+        m_id, main, supplemental = datasets
+        logging.debug("Mapper %i: Computing map: %i", w_id, m_id)
         for k, v in mapper.map(main, *supplemental):
             dw.add_record(k, v)
 
+    logging.debug("Mapper %i: No more chunks", w_id)
     out_q.put(dw.finished())
+    logging.debug("Mapper: %i: Finished", w_id)
 
-def mr_reduce(in_q, out_q, reducer, dw):
+def mr_reduce(w_id, in_q, out_q, reducer, dw):
     dw.start()
     while True:
-        datasets = in_q.get()
-        if datasets is None:
+        payload = in_q.get()
+        if payload is None:
             break
 
-        logging.debug("Datasets received: %s", datasets)
+        r_id, datasets = payload
+        logging.debug("Reducer %i: Reduce received: %s", w_id, r_id)
         for k, v in reducer.reduce(*datasets):
             dw.add_record(k, v)
 
-    out_q.put(dw.finished())
+    logging.debug("Reducer %i: No more chunks", w_id)
+    output = dw.finished()
+    out_q.put(output)
+    logging.debug("Reducer %i: Finished", w_id)
 
 class MTRunner(SimpleRunner):
     def __init__(self, name, graph, 
@@ -220,14 +227,14 @@ class MTRunner(SimpleRunner):
             input_q.put(None)
 
         res = []
-        for _ in range(len(procs)):
+        for i in range(len(procs)):
             while True:
                 try:
                     res.append(output_q.get(timeout=0.01))
+                    logging.debug("Worker %s/%s completed", i + 1, len(procs))
                     break
                 except Empty:
                     pass
-
 
         for p in procs:
             p.join()
@@ -243,7 +250,7 @@ class MTRunner(SimpleRunner):
                     Splitter(), self.n_partitions)
 
             mappers.append(multiprocessing.Process(target=mr_map,
-                args=(input_q, output_q, mapper, dw)))
+                args=(m_id, input_q, output_q, mapper, dw)))
 
             mappers[-1].start()
 
@@ -252,8 +259,10 @@ class MTRunner(SimpleRunner):
         if not isinstance(iter_dm, Chunker):
             iter_dm = DMChunker(iter_dm)
         
-        for chunk in iter_dm.chunks():
-            input_q.put((chunk, data_mappings[1:]))
+        for i, chunk in enumerate(iter_dm.chunks()):
+            input_q.put((i, chunk, data_mappings[1:]))
+
+        logging.debug("Processing %s maps", i + 1)
         
         return self._collapse_output(input_q, output_q, mappers)
 
@@ -266,7 +275,7 @@ class MTRunner(SimpleRunner):
                     Splitter(), self.n_partitions)
 
             reducers.append(multiprocessing.Process(target=mr_reduce,
-                args=(input_q, output_q, reducer, dw)))
+                args=(r_id, input_q, output_q, reducer, dw)))
 
             reducers[-1].start()
 
@@ -280,6 +289,6 @@ class MTRunner(SimpleRunner):
                 transpose[key_id].append(datasets)
         
         for key_id, dms in transpose.items():
-            input_q.put(dms)
+            input_q.put((key_id, dms))
 
         return self._collapse_output(input_q, output_q, reducers)
