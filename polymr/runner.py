@@ -115,6 +115,7 @@ class RunnerBase(object):
             data[source] = data_mapping
             to_delete.add(source)
 
+        logging.info("Finished...")
         # Collect the outputs and determine what to delete
         ret = []
         for source in outputs:
