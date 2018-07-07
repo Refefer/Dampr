@@ -207,9 +207,11 @@ class MTRunner(SimpleRunner):
             input_q.put(None)
 
         res = []
+        for _ in range(len(procs)):
+            res.append(output_q.get())
+
         for p in procs:
             p.join()
-            res.append(output_q.get())
 
         return self.collapse_datamappings(res)
 
