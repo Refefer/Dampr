@@ -8,7 +8,6 @@ from .base import *
 
 CPUS = multiprocessing.cpu_count()
 
-
 class Source(object):
     def __init__(self, name):
         self.name = name
@@ -49,7 +48,7 @@ class Graph(object):
         assert all(isinstance(inp, Source) for inp in inputs)
         if name is None:
             name = 'Reduce: {}'
-            
+
         inp = Source(name.format(len(self.stages)))
         self.stages.append((inp, inputs, reducer))
         return inp
@@ -231,8 +230,8 @@ class MTRunner(SimpleRunner):
         output_q = Queue()
         mappers = []
         for m_id in range(self.n_maps):
-            dw = PickledDatasetWriter(self._gen_dw_name(stage_id, 'map.{}'.format(m_id)),
-                    Splitter(), self.n_reducers)
+            dw = PickledDatasetWriter(self._gen_dw_name(stage_id, 'map/{}'.format(m_id)),
+                    Splitter(), self.n_partitions)
 
             mappers.append(multiprocessing.Process(target=mr_map,
                 args=(input_q, output_q, mapper, dw)))
@@ -254,8 +253,8 @@ class MTRunner(SimpleRunner):
         output_q = Queue()
         reducers = []
         for r_id in range(self.n_reducers):
-            dw = PickledDatasetWriter(self._gen_dw_name(stage_id, 'red.{}'.format(r_id)),
-                    Splitter(), self.n_reducers)
+            dw = PickledDatasetWriter(self._gen_dw_name(stage_id, 'red/{}'.format(r_id)),
+                    Splitter(), self.n_partitions)
 
             reducers.append(multiprocessing.Process(target=mr_reduce,
                 args=(input_q, output_q, reducer, dw)))
