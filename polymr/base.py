@@ -137,6 +137,9 @@ class PickledDatasetWriter(DatasetWriter):
         self.compressed = compressed
 
     def start(self):
+        if not os.path.isdir(self.name):
+            os.makedirs(self.name)
+
         self.files = {}
         self.buffers = {}
         for i in range(self.n_partitions):
@@ -144,7 +147,7 @@ class PickledDatasetWriter(DatasetWriter):
             self.buffers[i] = []
 
     def write_batch(self, i, buf):
-        name = '{}.{}'.format(self.name, i)
+        name = '{}/{}'.format(self.name, i)
         if self.compressed:
             f = gzip.GzipFile(name, 'wb', 1)
         else:

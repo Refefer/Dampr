@@ -1,3 +1,4 @@
+import os
 import logging
 import multiprocessing
 from multiprocessing import Queue
@@ -54,10 +55,19 @@ class Graph(object):
         return inp
 
 class RunnerBase(object):
-    def __init__(self, name, graph):
+    def __init__(self, name, graph, working_dir='/tmp'):
 
         self.name = name
+        self.working_dir = working_dir
         self.graph = graph
+
+    @property
+    def base_path(self):
+        return os.path.join(self.working_dir, self.name)
+
+    def _gen_dw_name(self, stage_id, suffix):
+        return os.path.join(self.base_path, 
+                'stage_{}_{}'.format(stage_id, suffix))
 
     def run_map(self, stage_id, data, mapper):
         raise NotImplementedError()
@@ -77,6 +87,10 @@ class RunnerBase(object):
         return new_data
 
     def run(self, outputs):
+        # Create the temp directory if it doesn't exist
+        if not os.path.isdir(self.base_path):
+            os.makedirs(self.base_path)
+
         data = self.graph.inputs.copy()
         to_delete = set()
         splitter = Splitter()
@@ -126,9 +140,6 @@ class RunnerBase(object):
         return ret
 
 class SimpleRunner(RunnerBase):
-
-    def _gen_dw_name(self, stage_id, suffix):
-        return '/tmp/{}_stage_{}_{}'.format(self.name, stage_id, suffix) 
 
     # Collect across inputs
     def transpose_dms(self, data_mappings):
