@@ -211,18 +211,30 @@ class PickledDatasetWriter(DatasetWriter):
 
         return {i: fs for i, fs in enumerate(self.files)}
 
+class MemGZipDataset(Dataset):
+    def __init__(self, sio):
+        self.sio = sio
+
+    def read(self):
+        with gzip.GzipFile(fileobj=StringIO(self.sio)) as sio:
+            n_records = pickle.load(sio)
+            for _ in range(n_records):
+                yield pickle.load(sio)
+
+    def delete(self):
+        pass
+
 class UnorderedWriter(DatasetWriter):
-    def __init__(self, worker_fs, chunk_size=64*1024*1024):
+    def __init__(self, worker_fs, chunk_size=64*1024*1024, always_to_disk=False):
         super(UnorderedWriter, self).__init__(worker_fs)
         self.chunk_size = chunk_size
         self.chunk_id = 0
         self.files = []
+        self.always_to_disk = always_to_disk
     
-    def flush(self):
+    def _write_to_gzip(self, fobj):
         buf = self.buffer
-        chunk_name = self.worker_fs.get_file(str(self.chunk_id))
-        self.chunk_id += 1
-        with gzip.GzipFile(chunk_name, 'wb', 1) as f:
+        with gzip.GzipFile(fileobj=fobj, mode='wb', compresslevel=1) as f:
             dump_pickle(self.records, f)
 
             buf.seek(0)
@@ -231,6 +243,14 @@ class UnorderedWriter(DatasetWriter):
                 f.write(data)
                 data = buf.read(4096)
 
+
+    def flush(self):
+        buf = self.buffer
+        chunk_name = self.worker_fs.get_file(str(self.chunk_id))
+        self.chunk_id += 1
+        with open(chunk_name, 'wb') as out:
+            self._write_to_gzip(out)
+        
         self.files.append(PickledDataset(chunk_name, True))
         self._new_buffer()
 
@@ -248,9 +268,19 @@ class UnorderedWriter(DatasetWriter):
         if self.buffer.tell() > self.chunk_size:
             self.flush()
 
+    def flush_to_memory(self):
+        tmp = StringIO()
+        self._write_to_gzip(tmp)
+        # Compress the data 
+        d = MemGZipDataset(tmp.getvalue())
+        self.files.append(d)
+
     def finished(self):
         if self.records > 0:
-            self.flush()
+            if self.always_to_disk:
+                self.flush()
+            else:
+                self.flush_to_memory()
 
         return {0: self.files}
     
@@ -378,7 +408,36 @@ class PartialReduceCombiner(Combiner):
 
     def combine(self, datasets):
         pass
-        
+
+class Shuffler(object):
+    def __init__(self, fs, n_partitions, splitter):
+        self.fs = fs
+        self.n_partitions = n_partitions
+        self.splitter = splitter
+
+    def shuffle(self, fs, datasets):
+        """
+        Needs to return a {partition_id: [datasets]}
+        """
+        raise NotImplementedError()
+
+class DefaultShuffler(Shuffler):
+    def shuffle(self, fs, datasets):
+        partitions = []
+        for i in range(self.n_partitions):
+            writer = UnorderedWriter(fs.get_substage('partition_{}'.format(i)))
+            writer.start()
+            partitions.append(writer)
+
+        for k, v in MergeDataset(datasets).read():
+            p_idx = self.splitter.partitions(key, self.n_partitions)
+            partitions[p_idx].add_record(k, v)
+
+        splits = {}
+        for i, writer in enumerate(partitions):
+            splits[i] = writer.finished()[0]
+
+        return splits
 
 class FileSystem(object):
     def __init__(self, path):
@@ -394,13 +453,13 @@ class StageFileSystem(object):
     def get_worker(self, w_id):
         return WorkerFileSystem(os.path.join(self.path, 'worker_{}'.format(w_id)))
 
-class WorkerFileSystem(object):
+class WorkingFileSystem(object):
     def __init__(self, path):
         if not os.path.isdir(path):
             os.makedirs(path)
 
-        self.path = path
-    
+        self.path = path 
+
     def get_file(self, name=None):
         if name is None:
             name = str(uuid.uuid4())
@@ -408,3 +467,11 @@ class WorkerFileSystem(object):
         new_file = os.path.join(self.path, name)
         return new_file
 
+class WorkerFileSystem(WorkingFileSystem):
+            
+    def get_substage(self, w_id):
+        return SubStageFileSystem(os.path.join(self.path, 'sub_{}'.format(w_id)))
+
+class SubStageFileSystem(WorkingFileSystem):
+    pass
+    
