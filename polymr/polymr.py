@@ -119,7 +119,7 @@ class PReduce(PBase):
 
             return i + 1
 
-        return self.reduce(_f)
+        return self.reduce(_count)
 
     def first(self):
         return self.reduce(lambda k, vs: next(vs))

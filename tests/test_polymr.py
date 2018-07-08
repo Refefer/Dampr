@@ -21,6 +21,14 @@ class PolymrTest(unittest.TestCase):
 
         self.assertEquals(10, next(iter(res[0]))[1])
 
+    def test_count_red(self):
+        res = self.items \
+                .group_by(lambda x: 1, lambda x: 1) \
+                .count() \
+                .run()
+
+        self.assertEquals(10, next(iter(res[0]))[1])
+
     def test_sum(self):
         res = self.items \
                 .group_by(lambda x: 1) \
