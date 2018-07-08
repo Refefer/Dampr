@@ -122,21 +122,14 @@ class DatasetWriter(object):
         raise NotImplementedError()
 
 class PickledDataset(Dataset):
-    def __init__(self, path, compressed):
+    def __init__(self, path):
         self.path = path
-        self.compressed = compressed
 
     def read(self):
-        if self.compressed:
-            f = gzip.GzipFile(self.path, 'rb', 1)
-        else:
-            f = open(self.path, 'rb')
-
-        n_records = pickle.load(f)
-        for _ in range(n_records):
-            yield pickle.load(f)
-
-        f.close()
+        with gzip.GzipFile(self.path, 'rb', 1) as f:
+            n_records = pickle.load(f)
+            for _ in range(n_records):
+                yield pickle.load(f)
 
     def delete(self):
         os.unlink(self.path)
@@ -147,12 +140,11 @@ class PickledDataset(Dataset):
 
 class PickledDatasetWriter(DatasetWriter):
     def __init__(self, worker_fs, splitter, n_partitions, 
-            buffer_size=10*1024*1024, compressed=True):
+            buffer_size=10*1024*1024):
         super(PickledDatasetWriter, self).__init__(worker_fs)
         self.splitter     = splitter
         self.n_partitions = n_partitions
         self.buffer_size  = buffer_size
-        self.compressed   = compressed
 
     def start(self):
         self.files   = []
@@ -165,14 +157,10 @@ class PickledDatasetWriter(DatasetWriter):
 
     def write_batch(self, suffix, buf, keyoffs):
         path = self.worker_fs.get_file(suffix)
-        if self.compressed:
-            f = gzip.GzipFile(path, 'wb', 1)
-        else:
-            f = open(path, 'wb') 
-
-        dump_pickle(len(keyoffs), f)
-        for kv in self._sort_kvs(keyoffs, buf):
-            f.write(kv)
+        with gzip.GzipFile(path, 'wb', 1) as f:
+            dump_pickle(len(keyoffs), f)
+            for kv in self._sort_kvs(keyoffs, buf):
+                f.write(kv)
 
         return path
 
@@ -186,7 +174,7 @@ class PickledDatasetWriter(DatasetWriter):
         buf, keyoffs = self.buffers[nidx], self.keyoffs[nidx]
         suffix = '{}.{}'.format(nidx, len(self.files[nidx]))
         file_name = self.write_batch(suffix, buf, keyoffs)
-        dataset = PickledDataset(file_name, self.compressed)
+        dataset = PickledDataset(file_name)
         self.files[nidx].append(dataset)
         buf.truncate(0)
         self.keyoffs[nidx] = []
