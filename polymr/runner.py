@@ -245,13 +245,11 @@ class MTRunner(RunnerBase):
 
     def run_reducer(self, stage_id, data_mappings, reducer):
         # Collect across inputs
-        transpose = {}
+        keys = sorted({k for dm in data_mappings for k in dm})
+        transpose = {k: [] for k in keys}
         for dm in data_mappings:
-            for key_id, datasets in dm.items():
-                if key_id not in transpose:
-                    transpose[key_id] = []
-
-                transpose[key_id].append(datasets)
+            for k in keys:
+                transpose[k].append(dm.get(k, []))
         
         stage_fs = self.file_system.get_stage(stage_id)
         rds = ReduceStageRunner(self.n_reducers, stage_fs, reducer)

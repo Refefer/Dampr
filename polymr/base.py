@@ -26,14 +26,28 @@ class Splitter(object):
         return hash(key) % n_partitions
 
 class Dataset(object):
+
     def read(self):
         raise NotImplementedError()
+
+    def grouped_read(self):
+        for key, group in itertools.groupby(self.read(), key=lambda x: x[0]):
+            it = (kv[1] for kv in group)
+            yield key, it
 
     def delete(self):
         raise NotImplementedError()
 
     def __iter__(self):
         return self.read()
+
+class EmptyDataset(Dataset):
+
+    def read(self):
+        return iter([])
+
+    def delete(self):
+        pass
 
 class Chunker(object):
     def chunks(self):
@@ -297,19 +311,18 @@ class Map(Mapper):
                 yield k2, v2
 
 class Reducer(object):
-    def reduce(self, key, *datasets):
+    def reduce(self, *datasets):
         raise NotImplementedError()
 
     def yield_groups(self, dataset):
-        if len(dataset) > 0:
-            if len(dataset) > 1:
-                dataset = MergeDataset(dataset)
-            else:
-                dataset = dataset[0]
+        if len(dataset) > 1:
+            dataset = MergeDataset(dataset)
+        elif len(dataset) == 1:
+            dataset = dataset[0]
+        else:
+            dataset = EmptyDataset()
 
-            for key, group in itertools.groupby(dataset.read(), key=lambda x: x[0]):
-                it = (kv[1] for kv in group)
-                yield key, it
+        return dataset.grouped_read()
 
 class Reduce(Reducer):
     """
@@ -327,9 +340,10 @@ class Join(Reducer):
     def __init__(self, joiner_f):
         self.joiner_f = joiner_f
 
-    def reduce(self, d1, d2):
-        g1 = self.yield_groups(d1)
-        g2 = self.yield_groups(d2)
+    def reduce(self, *datasets):
+        assert len(datasets) == 2
+        g1 = self.yield_groups(datasets[0])
+        g2 = self.yield_groups(datasets[1])
         left, right = next(g1, None), next(g2, None)
         while left is not None and right is not None:
             if left[0] < right[0]:
@@ -341,12 +355,30 @@ class Join(Reducer):
                 yield k, self.joiner_f(k, left[1], right[1])
                 left, right = next(g1, None), next(g2, None)
 
-def Filter(predicate):
-    def _f(key, value):
-        if predicate(key, value):
-            yield key, value
+class Combiner(object):
+    """
+    Interface for the combining ordered chunks from the Map stage
+    """
 
-    return Map(_f)
+    def combine(self, datasets):
+        """
+        Takes in a set of datasets and streams out key/values
+        """
+        raise NotImplementedError()
+
+class NoopCombiner(Combiner):
+
+    def combine(self, datasets):
+       md = MergeDataset(datasets)
+       return md.read()
+
+class PartialReduceCombiner(Combiner):
+    def __init__(self, reducer):
+        self.reducer = reducer
+
+    def combine(self, datasets):
+        pass
+        
 
 class FileSystem(object):
     def __init__(self, path):
@@ -375,3 +407,4 @@ class WorkerFileSystem(object):
 
         new_file = os.path.join(self.path, name)
         return new_file
+
