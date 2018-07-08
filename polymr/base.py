@@ -8,14 +8,17 @@ PY_MAJOR = sys.version_info.major
 
 try:
     import cPickle as pickle
+    from  cStringIO import StringIO
 
     def dump_pickle(obj, f):
         pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
 
 except ImportError:
     import pickle
+    from io import StringIO
 
-    dump_pickle = pickle.dump
+    def dump_pickle(o, f):
+        pickle.dump(o, f,  pickle.HIGHEST_PROTOCOL)
 
 class Splitter(object):
     def partition(self, key, n_partitions):
@@ -116,7 +119,7 @@ class PickledDataset(Dataset):
 
         n_records = pickle.load(f)
         for _ in range(n_records):
-            yield pickle.load(f)
+            yield pickle.load(f), pickle.load(f)
 
         f.close()
 
@@ -129,7 +132,7 @@ class PickledDataset(Dataset):
 
 class PickledDatasetWriter(DatasetWriter):
     def __init__(self, name, splitter, n_partitions, 
-            buffer_size=10000, compressed=True):
+            buffer_size=10*1024*1024, compressed=True):
         super(PickledDatasetWriter, self).__init__(name)
         self.splitter   = splitter
         self.n_partitions = n_partitions
@@ -142,43 +145,64 @@ class PickledDatasetWriter(DatasetWriter):
 
         self.files = {}
         self.buffers = {}
+        self.offsets = {}
         for i in range(self.n_partitions):
             self.files[i] = []
-            self.buffers[i] = []
+            self.buffers[i] = StringIO()
+            self.offsets[i] = []
 
-    def write_batch(self, i, buf):
-        name = '{}/{}'.format(self.name, i)
+    def write_batch(self, suffix, buf, offsets):
+        name = '{}/{}'.format(self.name, suffix)
         if self.compressed:
             f = gzip.GzipFile(name, 'wb', 1)
         else:
             f = open(name, 'wb') 
 
-        dump_pickle(len(buf), f)
-        for d in buf:
-            dump_pickle(d, f)
-
-        f.close()
+        dump_pickle(len(offsets), f)
+        for kv in self._sort_kvs(offsets, buf):
+            f.write(kv)
 
         return name
 
+    def _sort_kvs(self, offsets, buf):
+        # read in keys
+        keys = []
+        for i, (kvs, _) in enumerate(offsets):
+            buf.seek(kvs)
+            keys.append((pickle.load(buf), i))
+
+        keys.sort(key=lambda x: x[0])
+        for _, i in keys:
+            start, stop = offsets[i]
+            buf.seek(start)
+            yield buf.read(stop - start)
+
     def flush(self, nidx):
-        buf = self.buffers[nidx]
-        buf.sort(key=lambda x: x[0])
+        buf, offsets = self.buffers[nidx], self.offsets[nidx]
         suffix = '{}.{}'.format(nidx, len(self.files[nidx]))
-        dataset = PickledDataset(self.write_batch(suffix, buf), self.compressed)
+        file_name =self.write_batch(suffix, buf, offsets)
+        dataset = PickledDataset(file_name, self.compressed)
         self.files[nidx].append(dataset)
-        del buf[:]
+        buf.truncate(0)
+        self.offsets[nidx] = []
+
+    def _write_to_buffer(self, key, value, f):
+        key_start = f.tell()
+        dump_pickle(key, f)
+        dump_pickle(value, f)
+        return key_start, f.tell()
 
     def add_record(self, key, value):
         nidx = self.splitter.partition(key, self.n_partitions)
-        buf = self.buffers[nidx]
-        buf.append((key, value))
-        if len(buf) > self.buffer_size:
+        buf, offsets = self.buffers[nidx], self.offsets[nidx]
+        kvs, kvst = self._write_to_buffer(key, value, buf)
+        offsets.append((kvs, kvst))
+        if buf.tell() > self.buffer_size:
             self.flush(nidx)
 
     def finished(self):
         for nidx, buffer in self.buffers.items():
-            if len(buffer) > 0:
+            if buffer.tell() > 0:
                 self.flush(nidx)
 
         return self.files
