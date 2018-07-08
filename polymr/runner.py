@@ -151,22 +151,88 @@ def mr_map(job, out_q, mapper, dw):
     out_q.put((w_id, m_id, dw.finished()))
     logging.debug("Mapper: %i: Finished", w_id)
 
-def mr_reduce(w_id, in_q, out_q, reducer, dw):
+def mr_reduce(job, out_q, reducer, dw):
+    w_id = os.getpid()
     dw.start()
-    while True:
-        payload = in_q.get()
-        if payload is None:
-            break
+    r_id, datasets= job
+    logging.debug("Reducer %i: Computing map: %i", w_id, r_id)
+    for k, v in reducer.reduce(*datasets):
+        dw.add_record(k, v)
 
-        r_id, datasets = payload
-        logging.debug("Reducer %i: Reduce received: %s", w_id, r_id)
-        for k, v in reducer.reduce(*datasets):
-            dw.add_record(k, v)
+    out_q.put((w_id, r_id, dw.finished()))
+    logging.debug("Reducer: %i: Finished", w_id)
 
-    logging.debug("Reducer %i: No more chunks", w_id)
-    output = dw.finished()
-    out_q.put(output)
-    logging.debug("Reducer %i: Finished", w_id)
+class StageRunner(object):
+    def __init__(self, max_procs):
+        self.max_procs = max_procs
+
+    def execute_stage(self, t_id, payload):
+        raise NotImplementedError()
+
+    def run(self, job_queue):
+        output_q = Queue()
+        jobs = {}
+        finished = []
+        def get_output():
+            child_pid, task_id, payload = output_q.get()
+            finished.append(payload)
+            
+            # Cleanup pid
+            jobs[child_pid].join()
+            del jobs[child_pid]
+
+        # Assign tasks via forking
+        jobs_left = True
+        while jobs_left:
+            next_job = next(job_queue, None)
+            jobs_left = next_job is not None
+            if next_job is not None:
+                # Are we full?  If so, wait for one to exit
+                if len(jobs) == self.max_procs:
+                    get_output()
+
+                proc = self.execute_stage(next_job[0], next_job, output_q)
+                proc.start()
+                jobs[proc.pid] = proc
+
+        while len(jobs) != 0:
+            get_output()
+
+        return finished
+
+class MapStageRunner(StageRunner):
+    def __init__(self, max_procs, stage_id, name_gen, n_partitions, mapper):
+        super(MapStageRunner, self).__init__(max_procs)
+        self.name_gen = name_gen
+        self.n_partitions = n_partitions
+        self.stage_id = stage_id
+        self.mapper = mapper
+
+    def execute_stage(self, t_id, payload, output_q):
+        # Start next job
+        dw = PickledDatasetWriter(self.name_gen(
+            self.stage_id, 'map/{}'.format(t_id)),
+                Splitter(), self.n_partitions)
+
+        m = multiprocessing.Process(target=mr_map,
+            args=(payload, output_q, self.mapper, dw))
+
+        return m
+
+class ReduceStageRunner(StageRunner):
+    def __init__(self, max_procs, stage_id, name_gen, reducer):
+        super(ReduceStageRunner, self).__init__(max_procs)
+        self.name_gen = name_gen
+        self.stage_id = stage_id
+        self.reducer = reducer
+
+    def execute_stage(self, t_id, payload, output_q):
+        dw = UnorderedWriter(self.name_gen(self.stage_id, 'red/{}'.format(t_id)))
+
+        m = multiprocessing.Process(target=mr_reduce,
+            args=(payload, output_q, self.reducer, dw))
+
+        return m
 
 class MTRunner(RunnerBase):
     def __init__(self, name, graph, 
@@ -199,62 +265,20 @@ class MTRunner(RunnerBase):
         return self.collapse_datamappings(res)
 
     def run_map(self, stage_id, data_mappings, mapper):
-        output_q = Queue()
-
         # if we get more than two input mappings, we only iterate over the first one
         iter_dm = data_mappings[0]
         if not isinstance(iter_dm, Chunker):
             iter_dm = DMChunker(iter_dm)
 
         jobs_queue = ((i, chunk, data_mappings[1:]) for i, chunk in enumerate(iter_dm.chunks()))
+        msr = MapStageRunner(self.n_maps, stage_id,
+                self._gen_dw_name, self.n_partitions, mapper)
 
-        jobs = {}
-        finished = []
-        def get_output():
-            child_pid, task_id, payload = output_q.get()
-            finished.append(payload)
-            
-            # Cleanup pid
-            jobs[child_pid].join()
-            del jobs[child_pid]
-
-        # Assign tasks via forking
-        jobs_left = True
-        while jobs_left:
-            next_job = next(jobs_queue, None)
-            jobs_left = next_job is not None
-            if next_job is not None:
-                # Are we full?  If so, wait for one to exit
-                if len(jobs) == self.n_maps:
-                    get_output()
-
-                # Start next job
-                dw = PickledDatasetWriter(self._gen_dw_name(
-                    stage_id, 'map/{}'.format(next_job[0])),
-                        Splitter(), self.n_partitions)
-
-                m = multiprocessing.Process(target=mr_map,
-                    args=(next_job, output_q, mapper, dw))
-                m.start()
-                jobs[m.pid] = m
-
-        while len(jobs) != 0:
-            get_output()
+        finished = msr.run(jobs_queue)
 
         return self.collapse_datamappings(finished)
 
     def run_reducer(self, stage_id, data_mappings, reducer):
-        input_q = Queue()
-        output_q = Queue()
-        reducers = []
-        for r_id in range(self.n_reducers):
-            dw = UnorderedWriter(self._gen_dw_name(stage_id, 'red/{}'.format(r_id)))
-
-            reducers.append(multiprocessing.Process(target=mr_reduce,
-                args=(r_id, input_q, output_q, reducer, dw)))
-
-            reducers[-1].start()
-
         # Collect across inputs
         transpose = {}
         for dm in data_mappings:
@@ -264,7 +288,7 @@ class MTRunner(RunnerBase):
 
                 transpose[key_id].append(datasets)
         
-        for key_id, dms in transpose.items():
-            input_q.put((key_id, dms))
+        rds = ReduceStageRunner(self.n_reducers, stage_id, self._gen_dw_name, reducer)
+        finished = rds.run(iter(transpose.items()))
 
-        return self._collapse_output(input_q, output_q, reducers)
+        return self.collapse_datamappings(finished)
