@@ -140,58 +140,15 @@ class RunnerBase(object):
 
         return ret
 
-class SimpleRunner(RunnerBase):
-
-    # Collect across inputs
-    def transpose_dms(self, data_mappings):
-        transpose = {}
-        for dm in data_mappings:
-            for key_id, datasets in dm.items():
-                if key_id not in transpose:
-                    transpose[key_id] = []
-
-                transpose[key_id].append(datasets)
-
-        return transpose
-
-    def run_map(self, stage_id, data_mappings, mapper):
-        # if we get more than two input mappings, we only iterate over the first one
-        iter_dm = data_mappings[0]
-        if not isinstance(iter_dm, Chunker):
-            iter_dm = DMChunker(iter_dm)
-
-        dw = PickledDatasetWriter(self._gen_dw_name(stage_id, 'map'), Splitter(), 1)
-        dw.start()
-        for chunk in iter_dm.chunks():
-            for k, v in mapper.map(chunk, *data_mappings[1:]):
-                dw.add_record(k, v)
-
-        return dw.finished()
-
-    def run_reducer(self, stage_id, data_mappings, reducer):
-        dw = PickledDatasetWriter(self._gen_dw_name(stage_id, 'red'), Splitter(), 1)
-        dw.start()
-        for r_idx in data_mappings[0].keys():
-            datasets = [dm[r_idx] for dm in data_mappings]
-            for k, v in reducer.reduce(*datasets):
-                dw.add_record(k, v)
-
-        return dw.finished()
-
-def mr_map(w_id, in_q, out_q, mapper, dw):
+def mr_map(job, out_q, mapper, dw):
+    w_id = os.getpid()
     dw.start()
-    while True:
-        datasets = in_q.get()
-        if datasets is None:
-            break
+    m_id, main, supplemental = job
+    logging.debug("Mapper %i: Computing map: %i", w_id, m_id)
+    for k, v in mapper.map(main, *supplemental):
+        dw.add_record(k, v)
 
-        m_id, main, supplemental = datasets
-        logging.debug("Mapper %i: Computing map: %i", w_id, m_id)
-        for k, v in mapper.map(main, *supplemental):
-            dw.add_record(k, v)
-
-    logging.debug("Mapper %i: No more chunks", w_id)
-    out_q.put(dw.finished())
+    out_q.put((w_id, m_id, dw.finished()))
     logging.debug("Mapper: %i: Finished", w_id)
 
 def mr_reduce(w_id, in_q, out_q, reducer, dw):
@@ -211,7 +168,7 @@ def mr_reduce(w_id, in_q, out_q, reducer, dw):
     out_q.put(output)
     logging.debug("Reducer %i: Finished", w_id)
 
-class MTRunner(SimpleRunner):
+class MTRunner(RunnerBase):
     def __init__(self, name, graph, 
             n_maps=CPUS, 
             n_reducers=CPUS,
@@ -242,29 +199,49 @@ class MTRunner(SimpleRunner):
         return self.collapse_datamappings(res)
 
     def run_map(self, stage_id, data_mappings, mapper):
-        input_q = Queue()
         output_q = Queue()
-        mappers = []
-        for m_id in range(self.n_maps):
-            dw = PickledDatasetWriter(self._gen_dw_name(stage_id, 'map/{}'.format(m_id)),
-                    Splitter(), self.n_partitions)
-
-            mappers.append(multiprocessing.Process(target=mr_map,
-                args=(m_id, input_q, output_q, mapper, dw)))
-
-            mappers[-1].start()
 
         # if we get more than two input mappings, we only iterate over the first one
         iter_dm = data_mappings[0]
         if not isinstance(iter_dm, Chunker):
             iter_dm = DMChunker(iter_dm)
-        
-        for i, chunk in enumerate(iter_dm.chunks()):
-            input_q.put((i, chunk, data_mappings[1:]))
 
-        logging.debug("Processing %s maps", i + 1)
-        
-        return self._collapse_output(input_q, output_q, mappers)
+        jobs_queue = ((i, chunk, data_mappings[1:]) for i, chunk in enumerate(iter_dm.chunks()))
+
+        jobs = {}
+        finished = []
+        def get_output():
+            child_pid, task_id, payload = output_q.get()
+            finished.append(payload)
+            
+            # Cleanup pid
+            jobs[child_pid].join()
+            del jobs[child_pid]
+
+        # Assign tasks via forking
+        jobs_left = True
+        while jobs_left:
+            next_job = next(jobs_queue, None)
+            jobs_left = next_job is not None
+            if next_job is not None:
+                # Are we full?  If so, wait for one to exit
+                if len(jobs) == self.n_maps:
+                    get_output()
+
+                # Start next job
+                dw = PickledDatasetWriter(self._gen_dw_name(
+                    stage_id, 'map/{}'.format(next_job[0])),
+                        Splitter(), self.n_partitions)
+
+                m = multiprocessing.Process(target=mr_map,
+                    args=(next_job, output_q, mapper, dw))
+                m.start()
+                jobs[m.pid] = m
+
+        while len(jobs) != 0:
+            get_output()
+
+        return self.collapse_datamappings(finished)
 
     def run_reducer(self, stage_id, data_mappings, reducer):
         input_q = Queue()
