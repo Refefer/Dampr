@@ -57,17 +57,8 @@ class Graph(object):
 class RunnerBase(object):
     def __init__(self, name, graph, working_dir='/tmp'):
 
-        self.name = name
-        self.working_dir = working_dir
+        self.file_system = FileSystem(os.path.join(working_dir, name))
         self.graph = graph
-
-    @property
-    def base_path(self):
-        return os.path.join(self.working_dir, self.name)
-
-    def _gen_dw_name(self, stage_id, suffix):
-        return os.path.join(self.base_path, 
-                'stage_{}_{}'.format(stage_id, suffix))
 
     def run_map(self, stage_id, data, mapper):
         raise NotImplementedError()
@@ -87,10 +78,6 @@ class RunnerBase(object):
         return new_data
 
     def run(self, outputs):
-        # Create the temp directory if it doesn't exist
-        if not os.path.isdir(self.base_path):
-            os.makedirs(self.base_path)
-
         data = self.graph.inputs.copy()
         to_delete = set()
         splitter = Splitter()
@@ -201,18 +188,16 @@ class StageRunner(object):
         return finished
 
 class MapStageRunner(StageRunner):
-    def __init__(self, max_procs, stage_id, name_gen, n_partitions, mapper):
+    def __init__(self, max_procs, fs, n_partitions, mapper):
         super(MapStageRunner, self).__init__(max_procs)
-        self.name_gen = name_gen
+        self.fs = fs
         self.n_partitions = n_partitions
-        self.stage_id = stage_id
         self.mapper = mapper
 
     def execute_stage(self, t_id, payload, output_q):
+        fs = self.fs.get_worker('red/{}'.format(t_id))
         # Start next job
-        dw = PickledDatasetWriter(self.name_gen(
-            self.stage_id, 'map/{}'.format(t_id)),
-                Splitter(), self.n_partitions)
+        dw = PickledDatasetWriter(fs, Splitter(), self.n_partitions)
 
         m = multiprocessing.Process(target=mr_map,
             args=(payload, output_q, self.mapper, dw))
@@ -220,14 +205,14 @@ class MapStageRunner(StageRunner):
         return m
 
 class ReduceStageRunner(StageRunner):
-    def __init__(self, max_procs, stage_id, name_gen, reducer):
+    def __init__(self, max_procs, fs, reducer):
         super(ReduceStageRunner, self).__init__(max_procs)
-        self.name_gen = name_gen
-        self.stage_id = stage_id
+        self.fs = fs
         self.reducer = reducer
 
     def execute_stage(self, t_id, payload, output_q):
-        dw = UnorderedWriter(self.name_gen(self.stage_id, 'red/{}'.format(t_id)))
+        fs = self.fs.get_worker('red/{}'.format(t_id))
+        dw = UnorderedWriter(fs)
 
         m = multiprocessing.Process(target=mr_reduce,
             args=(payload, output_q, self.reducer, dw))
@@ -244,26 +229,6 @@ class MTRunner(RunnerBase):
         self.n_reducers = n_reducers
         self.n_partitions = n_partitions
 
-    def _collapse_output(self, input_q, output_q, procs):
-        # Add end sentinel
-        for _ in range(len(procs)):
-            input_q.put(None)
-
-        res = []
-        for i in range(len(procs)):
-            while True:
-                try:
-                    res.append(output_q.get(timeout=0.01))
-                    logging.debug("Worker %s/%s completed", i + 1, len(procs))
-                    break
-                except Empty:
-                    pass
-
-        for p in procs:
-            p.join()
-
-        return self.collapse_datamappings(res)
-
     def run_map(self, stage_id, data_mappings, mapper):
         # if we get more than two input mappings, we only iterate over the first one
         iter_dm = data_mappings[0]
@@ -271,8 +236,8 @@ class MTRunner(RunnerBase):
             iter_dm = DMChunker(iter_dm)
 
         jobs_queue = ((i, chunk, data_mappings[1:]) for i, chunk in enumerate(iter_dm.chunks()))
-        msr = MapStageRunner(self.n_maps, stage_id,
-                self._gen_dw_name, self.n_partitions, mapper)
+        stage_fs = self.file_system.get_stage(stage_id)
+        msr = MapStageRunner(self.n_maps, stage_fs, self.n_partitions, mapper)
 
         finished = msr.run(jobs_queue)
 
@@ -288,7 +253,8 @@ class MTRunner(RunnerBase):
 
                 transpose[key_id].append(datasets)
         
-        rds = ReduceStageRunner(self.n_reducers, stage_id, self._gen_dw_name, reducer)
+        stage_fs = self.file_system.get_stage(stage_id)
+        rds = ReduceStageRunner(self.n_reducers, stage_fs, reducer)
         finished = rds.run(iter(transpose.items()))
 
         return self.collapse_datamappings(finished)

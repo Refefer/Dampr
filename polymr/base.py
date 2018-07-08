@@ -1,3 +1,4 @@
+import uuid
 import sys
 import os
 import itertools
@@ -94,8 +95,8 @@ class DMChunker(Chunker):
                 yield v
 
 class DatasetWriter(object):
-    def __init__(self, name):
-        self.name       = name
+    def __init__(self, worker_fs):
+        self.worker_fs = worker_fs
 
     def start(self):
         raise NotImplementedError()
@@ -131,18 +132,15 @@ class PickledDataset(Dataset):
     __repr__ = __str__
 
 class PickledDatasetWriter(DatasetWriter):
-    def __init__(self, name, splitter, n_partitions, 
+    def __init__(self, worker_fs, splitter, n_partitions, 
             buffer_size=10*1024*1024, compressed=True):
-        super(PickledDatasetWriter, self).__init__(name)
+        super(PickledDatasetWriter, self).__init__(worker_fs)
         self.splitter     = splitter
         self.n_partitions = n_partitions
         self.buffer_size  = buffer_size
         self.compressed   = compressed
 
     def start(self):
-        if not os.path.isdir(self.name):
-            os.makedirs(self.name)
-
         self.files   = []
         self.buffers = []
         self.keyoffs = []
@@ -152,17 +150,17 @@ class PickledDatasetWriter(DatasetWriter):
             self.keyoffs.append([])
 
     def write_batch(self, suffix, buf, keyoffs):
-        name = '{}/{}'.format(self.name, suffix)
+        path = self.worker_fs.get_file(suffix)
         if self.compressed:
-            f = gzip.GzipFile(name, 'wb', 1)
+            f = gzip.GzipFile(path, 'wb', 1)
         else:
-            f = open(name, 'wb') 
+            f = open(path, 'wb') 
 
         dump_pickle(len(keyoffs), f)
         for kv in self._sort_kvs(keyoffs, buf):
             f.write(kv)
 
-        return name
+        return path
 
     def _sort_kvs(self, keyoffs, buf):
         keyoffs.sort(key=lambda x: x[0])
@@ -200,15 +198,15 @@ class PickledDatasetWriter(DatasetWriter):
         return {i: fs for i, fs in enumerate(self.files)}
 
 class UnorderedWriter(DatasetWriter):
-    def __init__(self, name, chunk_size=64*1024*1024):
-        super(UnorderedWriter, self).__init__(name)
+    def __init__(self, worker_fs, chunk_size=64*1024*1024):
+        super(UnorderedWriter, self).__init__(worker_fs)
         self.chunk_size = chunk_size
         self.chunk_id = 0
         self.files = []
     
     def flush(self):
         buf = self.buffer
-        chunk_name = '{}/{}'.format(self.name, self.chunk_id)
+        chunk_name = self.worker_fs.get_file(str(self.chunk_id))
         self.chunk_id += 1
         with gzip.GzipFile(chunk_name, 'wb', 1) as f:
             dump_pickle(self.records, f)
@@ -227,9 +225,6 @@ class UnorderedWriter(DatasetWriter):
         self.buffer = StringIO()
 
     def start(self):
-        if not os.path.isdir(self.name):
-            os.makedirs(self.name)
-
         self._new_buffer()
 
     def add_record(self, key, value):
@@ -353,3 +348,30 @@ def Filter(predicate):
 
     return Map(_f)
 
+class FileSystem(object):
+    def __init__(self, path):
+        self.path = path
+
+    def get_stage(self, name):
+        return StageFileSystem(os.path.join(self.path, 'stage_{}'.format(name)))
+
+class StageFileSystem(object):
+    def __init__(self, path):
+        self.path = path
+
+    def get_worker(self, w_id):
+        return WorkerFileSystem(os.path.join(self.path, 'worker_{}'.format(w_id)))
+
+class WorkerFileSystem(object):
+    def __init__(self, path):
+        if not os.path.isdir(path):
+            os.makedirs(path)
+
+        self.path = path
+    
+    def get_file(self, name=None):
+        if name is None:
+            name = str(uuid.uuid4())
+
+        new_file = os.path.join(self.path, name)
+        return new_file
