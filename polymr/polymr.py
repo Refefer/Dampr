@@ -19,6 +19,9 @@ class PBase(object):
         logging.info("run source: %s", self.source)
         return self.pmer.runner(name, self.pmer.graph).run([self.source])
 
+def _identity(k, v):
+    yield k, v
+
 class PMap(PBase):
 
     def __init__(self, source, pmer, agg=None):
@@ -41,9 +44,9 @@ class PMap(PBase):
 
         return self._add_map(_sample)
         
-    def checkpoint(self):
-        if len(self.agg) > 0:
-            aggs = self.agg[:]
+    def checkpoint(self, force=False):
+        if len(self.agg) > 0 or force:
+            aggs = [Map(_identity)] if len(self.agg) == 0 else self.agg[:]
             name = ' -> ' .join('{}'.format(a.mapper.__name__) for a in aggs)
             name = 'Stage {}: %s => %s' % (self.source, name)
             source = self.pmer.graph.add_mapper([self.source], Map(combine(aggs)), name)
@@ -97,9 +100,9 @@ class PMap(PBase):
 
     def join(self, other):
         assert isinstance(other, PBase)
-        left_source = self.checkpoint().source
+        left_source = self.checkpoint(True).source
         if isinstance(other, PMap):
-            other = other.checkpoint()
+            other = other.checkpoint(True)
 
         return PJoin(left_source, self.pmer, other.source)
 
@@ -138,7 +141,7 @@ class PReduce(PBase):
     def join(self, other):
         assert isinstance(other, PBase)
         if isinstance(other, PMap):
-            other = other.checkpoint()
+            other = other.checkpoint(True)
 
         return PJoin(self.source, self.pmer, other.source)
 
@@ -150,6 +153,9 @@ class PJoin(PBase):
     def __init__(self, source, pmer, right):
         super(PJoin, self).__init__(source, pmer)
         self.right = right
+
+    def run(self):
+        return self.reduce(lambda l, r: (list(l), list(r))).run()
 
     def reduce(self, aggregate):
         def _reduce(k, left, right):

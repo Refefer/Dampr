@@ -199,6 +199,52 @@ class PickledDatasetWriter(DatasetWriter):
 
         return {i: fs for i, fs in enumerate(self.files)}
 
+class UnorderedWriter(DatasetWriter):
+    def __init__(self, name, chunk_size=64*1024*1024):
+        super(UnorderedWriter, self).__init__(name)
+        self.chunk_size = chunk_size
+        self.chunk_id = 0
+        self.files = []
+    
+    def flush(self):
+        buf = self.buffer
+        chunk_name = '{}/{}'.format(self.name, self.chunk_id)
+        self.chunk_id += 1
+        with gzip.GzipFile(chunk_name, 'wb', 1) as f:
+            dump_pickle(self.records, f)
+
+            buf.seek(0)
+            data = buf.read(4096)
+            while data:
+                f.write(data)
+                data = buf.read(4096)
+
+        self.files.append(PickledDataset(chunk_name, True))
+        self._new_buffer()
+
+    def _new_buffer(self):
+        self.records = 0
+        self.buffer = StringIO()
+
+    def start(self):
+        if not os.path.isdir(self.name):
+            os.makedirs(self.name)
+
+        self._new_buffer()
+
+    def add_record(self, key, value):
+        dump_pickle((key, value), self.buffer)
+        self.records += 1
+
+        if self.buffer.tell() > self.chunk_size:
+            self.flush()
+
+    def finished(self):
+        if self.records > 0:
+            self.flush()
+
+        return {0: self.files}
+    
 class CatDataset(Dataset):
     def __init__(self, datasets):
         self.datasets = datasets

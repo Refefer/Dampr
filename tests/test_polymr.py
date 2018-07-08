@@ -51,7 +51,7 @@ class PolymrTest(unittest.TestCase):
         items = list([kv[1] for kv in res[0]])
         self.assertEquals([19,18,17,16,15,14,13,12,11,10],items)
 
-    def test_join(self):
+    def test_reduce_join(self):
         items2 = self.polymer.memory(list(range(10)))
         res = self.items \
                 .group_by(lambda x: x % 2) \
@@ -62,6 +62,25 @@ class PolymrTest(unittest.TestCase):
         output = list(res[0])
         self.assertEquals([0,2,4,6,8,10,12,14,16,18], output[0][1])
         self.assertEquals([1,3,5,7,9,11,13,15,17,19], output[1][1])
+
+    def test_disjoint(self):
+        items2 = self.polymer.memory(list(range(10))) \
+                .group_by(lambda x: -x)
+        output = self.items.group_by(lambda x: x) \
+                .join(items2) \
+                .run()
+        output = [v for k,v in output[0]]
+        self.assertEquals([], output)
+
+    def test_repartition(self):
+        items2 = self.polymer.memory(list(range(10))) \
+                .group_by(lambda x: -x) \
+                .reduce(lambda k, vs: sum(vs))
+        output = self.items.group_by(lambda x: x) \
+                .join(items2) \
+                .run()
+        output = [v for k,v in output[0]]
+        self.assertEquals([], output)
 
 if __name__ == '__main__':
     unittest.main()

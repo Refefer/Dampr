@@ -271,8 +271,7 @@ class MTRunner(SimpleRunner):
         output_q = Queue()
         reducers = []
         for r_id in range(self.n_reducers):
-            dw = PickledDatasetWriter(self._gen_dw_name(stage_id, 'red/{}'.format(r_id)),
-                    Splitter(), self.n_partitions)
+            dw = UnorderedWriter(self._gen_dw_name(stage_id, 'red/{}'.format(r_id)))
 
             reducers.append(multiprocessing.Process(target=mr_reduce,
                 args=(r_id, input_q, output_q, reducer, dw)))
