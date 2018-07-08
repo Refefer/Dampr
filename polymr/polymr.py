@@ -49,7 +49,7 @@ class PMap(PBase):
             aggs = [Map(_identity)] if len(self.agg) == 0 else self.agg[:]
             name = ' -> ' .join('{}'.format(a.mapper.__name__) for a in aggs)
             name = 'Stage {}: %s => %s' % (self.source, name)
-            source = self.pmer.graph.add_mapper([self.source], Map(combine(aggs)), name)
+            source = self.pmer.graph.add_mapper([self.source], Map(combine(aggs)), name=name)
             return PMap(source, self.pmer) 
 
         return self

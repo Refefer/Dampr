@@ -24,6 +24,20 @@ class Source(object):
 
     __repr__ = __str__
 
+class GMap(object):
+    def __init__(self, output, inputs, mapper, combiner, shuffler):
+        self.output = output
+        self.inputs = inputs
+        self.mapper = mapper
+        self.combiner = combiner
+        self.shuffler = shuffler
+
+class GReduce(object):
+    def __init__(self, output, inputs, reducer):
+        self.output = output
+        self.inputs = inputs
+        self.reducer = reducer
+
 class Graph(object):
     def __init__(self):
         self.inputs = {}
@@ -34,14 +48,16 @@ class Graph(object):
         self.inputs[inp] = dataset
         return inp
 
-    def add_mapper(self, inputs, mapper, name=None):
+    def add_mapper(self, inputs, mapper, combiner=None, shuffler=None, name=None):
         assert isinstance(mapper, Mapper)
+        assert isinstance(combiner, (type(None), Combiner))
+        assert isinstance(shuffler, (type(None), Shuffler))
         assert all(isinstance(inp, Source) for inp in inputs)
         if name is None:
             name = 'Map: {}'
 
         inp = Source(name.format(len(self.stages)))
-        self.stages.append((inp, inputs, mapper))
+        self.stages.append(GMap(inp, inputs, mapper, combiner, shuffler))
         return inp
 
     def add_reducer(self, inputs, reducer, name=None):
@@ -51,7 +67,7 @@ class Graph(object):
             name = 'Reduce: {}'
 
         inp = Source(name.format(len(self.stages)))
-        self.stages.append((inp, inputs, reducer))
+        self.stages.append(GReduce(inp, inputs, reducer))
         return inp
 
 class RunnerBase(object):
@@ -81,27 +97,28 @@ class RunnerBase(object):
         data = self.graph.inputs.copy()
         to_delete = set()
         splitter = Splitter()
-        for stage_id, (source, inputs, func) in enumerate(self.graph.stages):
+        for stage_id, stage in enumerate(self.graph.stages):
+        #for stage_id, (source, inputs, func) in enumerate(self.graph.stages):
             logging.info("Starting stage %s/%s", stage_id, len(self.graph.stages))
-            logging.info("Function - %s", type(func))
-            input_data = [data[i] for i in inputs]
+            logging.info("Function - %s", type(stage))
+            input_data = [data[i] for i in stage.inputs]
             for i, id in enumerate(input_data):
-                logging.info("Input: %s", inputs[i])
+                logging.info("Input: %s", stage.inputs[i])
                 logging.debug("Source Datasets: %s", id)
 
-            logging.info("Output: %s", source)
+            logging.info("Output: %s", stage.output)
 
-            if isinstance(func, Mapper):
-                data_mapping = self.run_map(stage_id, input_data, func)
+            if isinstance(stage, GMap):
+                data_mapping = self.run_map(stage_id, input_data, stage)
 
-            elif isinstance(func, Reducer):
-                data_mapping = self.run_reducer(stage_id, input_data, func)
+            elif isinstance(stage, GReduce):
+                data_mapping = self.run_reducer(stage_id, input_data, stage)
             else:
                 raise TypeError("Unknown type")
 
             assert isinstance(data_mapping, dict)
-            data[source] = data_mapping
-            to_delete.add(source)
+            data[stage.output] = data_mapping
+            to_delete.add(stage.output)
 
         logging.info("Finished...")
         # Collect the outputs and determine what to delete
@@ -127,7 +144,25 @@ class RunnerBase(object):
 
         return ret
 
-def mr_map(job, out_q, mapper, dw):
+def mr_map(job, out_q, stage, fs, n_partitions):
+    w_id = os.getpid()
+
+    # Default job, nothing special
+    dw = CSDatasetWriter(fs, Splitter(), n_partitions)
+
+    dw.start()
+    m_id, main, supplemental = job
+    logging.debug("Mapper %i: Computing map: %i", w_id, m_id)
+    for k, v in stage.mapper.map(main, *supplemental):
+        dw.add_record(k, v)
+
+    out_q.put((w_id, m_id, dw.finished()))
+    logging.debug("Mapper: %i: Finished", w_id)
+
+def mrcs_map(job, out_q, mapper, combiner, shuffler, fs, n_partitions):
+    """
+    Runs a more fine grained map/combine/shuffler
+    """
     w_id = os.getpid()
     dw.start()
     m_id, main, supplemental = job
@@ -135,15 +170,21 @@ def mr_map(job, out_q, mapper, dw):
     for k, v in mapper.map(main, *supplemental):
         dw.add_record(k, v)
 
-    out_q.put((w_id, m_id, dw.finished()))
+    sources = dw.finished()
+
+    logging.debug("Combining outputs...")
+    combined_stream = combiner.combine(sources)
+    results = shuffler.shuffle(fs, combined_streams)
+
+    out_q.put((w_id, m_id, results))
     logging.debug("Mapper: %i: Finished", w_id)
 
-def mr_reduce(job, out_q, reducer, dw):
+def mr_reduce(job, out_q, stage, dw):
     w_id = os.getpid()
     dw.start()
     r_id, datasets= job
     logging.debug("Reducer %i: Computing map: %i", w_id, r_id)
-    for k, v in reducer.reduce(*datasets):
+    for k, v in stage.reducer.reduce(*datasets):
         dw.add_record(k, v)
 
     out_q.put((w_id, r_id, dw.finished()))
@@ -196,11 +237,13 @@ class MapStageRunner(StageRunner):
 
     def execute_stage(self, t_id, payload, output_q):
         fs = self.fs.get_worker('red/{}'.format(t_id))
-        # Start next job
-        dw = PickledDatasetWriter(fs, Splitter(), self.n_partitions)
 
-        m = multiprocessing.Process(target=mr_map,
-            args=(payload, output_q, self.mapper, dw))
+        if self.mapper.combiner is None and self.mapper.shuffler is None:
+
+            m = multiprocessing.Process(target=mr_map,
+                args=(payload, output_q, self.mapper, fs, self.n_partitions))
+        else:
+            pass
 
         return m
 

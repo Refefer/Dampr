@@ -138,66 +138,76 @@ class PickledDataset(Dataset):
         return 'PickledDataset[path={}]'.format(self.path)
     __repr__ = __str__
 
-class PickledDatasetWriter(DatasetWriter):
+class BufferedSortedWriter(DatasetWriter):
+    def __init__(self, fs, buffer_size=10*1024**2):
+        self.fs = fs
+        self.buffer_size = buffer_size
+
+    def start(self):
+        self.files = []
+        self.buffer = StringIO()
+        self.keyoffs = []
+
+    def write_batch(self):
+        path = self.fs.get_file(str(len(self.files)))
+        with gzip.GzipFile(path, 'wb', 1) as f:
+            dump_pickle(len(self.keyoffs), f)
+            for kv in self._sort_kvs():
+                f.write(kv)
+
+        return path
+
+    def _sort_kvs(self):
+        self.keyoffs.sort(key=lambda x: x[0])
+        for _, start, stop in self.keyoffs:
+            self.buffer.seek(start)
+            yield self.buffer.read(stop - start)
+
+    def flush(self):
+        file_name = self.write_batch()
+        dataset = PickledDataset(file_name)
+        self.files.append(dataset)
+        self.buffer.truncate(0)
+        self.keyoffs = []
+
+    def _write_to_buffer(self, key, value):
+        key_start = self.buffer.tell()
+        dump_pickle((key, value), self.buffer)
+        return key_start, self.buffer.tell()
+
+    def add_record(self, key, value):
+        kvs, kvst = self._write_to_buffer(key, value)
+        self.keyoffs.append((key, kvs, kvst))
+        if self.buffer.tell() > self.buffer_size:
+            self.flush()
+
+    def finished(self):
+        if self.buffer.tell() > 0:
+            self.flush()
+
+        return {0: self.files}
+
+class CSDatasetWriter(DatasetWriter):
     def __init__(self, worker_fs, splitter, n_partitions, 
             buffer_size=10*1024*1024):
-        super(PickledDatasetWriter, self).__init__(worker_fs)
+        super(CSDatasetWriter, self).__init__(worker_fs)
         self.splitter     = splitter
         self.n_partitions = n_partitions
         self.buffer_size  = buffer_size
 
     def start(self):
-        self.files   = []
-        self.buffers = []
-        self.keyoffs = []
+        self.partitions = []
         for i in range(self.n_partitions):
-            self.files.append([])
-            self.buffers.append(StringIO())
-            self.keyoffs.append([])
-
-    def write_batch(self, suffix, buf, keyoffs):
-        path = self.worker_fs.get_file(suffix)
-        with gzip.GzipFile(path, 'wb', 1) as f:
-            dump_pickle(len(keyoffs), f)
-            for kv in self._sort_kvs(keyoffs, buf):
-                f.write(kv)
-
-        return path
-
-    def _sort_kvs(self, keyoffs, buf):
-        keyoffs.sort(key=lambda x: x[0])
-        for _, start, stop in keyoffs:
-            buf.seek(start)
-            yield buf.read(stop - start)
-
-    def flush(self, nidx):
-        buf, keyoffs = self.buffers[nidx], self.keyoffs[nidx]
-        suffix = '{}.{}'.format(nidx, len(self.files[nidx]))
-        file_name = self.write_batch(suffix, buf, keyoffs)
-        dataset = PickledDataset(file_name)
-        self.files[nidx].append(dataset)
-        buf.truncate(0)
-        self.keyoffs[nidx] = []
-
-    def _write_to_buffer(self, key, value, f):
-        key_start = f.tell()
-        dump_pickle((key, value), f)
-        return key_start, f.tell()
+            sub_fs = self.worker_fs.get_substage('partition_{}'.format(i))
+            self.partitions.append(BufferedSortedWriter(sub_fs, self.buffer_size))
+            self.partitions[-1].start()
 
     def add_record(self, key, value):
         nidx = self.splitter.partition(key, self.n_partitions)
-        buf, keyoffs = self.buffers[nidx], self.keyoffs[nidx]
-        kvs, kvst = self._write_to_buffer(key, value, buf)
-        keyoffs.append((key, kvs, kvst))
-        if buf.tell() > self.buffer_size:
-            self.flush(nidx)
+        self.partitions[nidx].add_record(key, value)
 
     def finished(self):
-        for nidx, buffer in enumerate(self.buffers):
-            if buffer.tell() > 0:
-                self.flush(nidx)
-
-        return {i: fs for i, fs in enumerate(self.files)}
+        return {i: p.finished()[0] for i, p in enumerate(self.partitions)}
 
 class MemGZipDataset(Dataset):
     def __init__(self, sio):
@@ -290,6 +300,9 @@ class MergeDataset(Dataset):
         self.datasets = datasets
 
     def read(self):
+        if len(self.datasets) == 1:
+            return self.datasets[0].read()
+
         its = [ds.read() for ds in self.datasets]
         if PY_MAJOR == 3:
             return heapq.merge(*its, key=lambda x: x[0])
@@ -390,6 +403,16 @@ class NoopCombiner(Combiner):
        md = MergeDataset(datasets)
        return md.read()
 
+class StreamDataset(Dataset):
+    def __init__(self, it):
+        self.it = it
+    
+    def read(self):
+        return self.it
+
+    def delete(self):
+        pass
+
 class PartialReduceCombiner(Combiner):
     def __init__(self, reducer):
         self.reducer = reducer
@@ -457,8 +480,8 @@ class WorkingFileSystem(object):
 
 class WorkerFileSystem(WorkingFileSystem):
             
-    def get_substage(self, w_id):
-        return SubStageFileSystem(os.path.join(self.path, 'sub_{}'.format(w_id)))
+    def get_substage(self, s):
+        return SubStageFileSystem(os.path.join(self.path, 'sub_{}'.format(s)))
 
 class SubStageFileSystem(WorkingFileSystem):
     pass
