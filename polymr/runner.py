@@ -99,7 +99,7 @@ class RunnerBase(object):
             logging.info("Function - %s", type(func))
             input_data = [data[i] for i in inputs]
             for i, id in enumerate(input_data):
-                logging.info("Source: %s", inputs[i])
+                logging.info("Input: %s", inputs[i])
                 logging.debug("Source Datasets: %s", id)
 
             logging.info("Output: %s", source)
