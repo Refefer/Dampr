@@ -298,10 +298,14 @@ class MTRunner(RunnerBase):
     def __init__(self, name, graph, 
             n_maps=CPUS, 
             n_reducers=CPUS,
-            n_partitions=200):
+            n_partitions=None):
         super(MTRunner, self).__init__(name, graph)
         self.n_maps = n_maps
         self.n_reducers = n_reducers
+
+        if n_partitions is None:
+            n_partitions = n_reducers * 4
+
         self.n_partitions = n_partitions
 
     def run_map(self, stage_id, data_mappings, mapper):
