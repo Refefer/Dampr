@@ -66,8 +66,8 @@ class PolymrTest(unittest.TestCase):
                 .run()
 
         output = list(res)
-        self.assertEquals([0,2,4,6,8,10,12,14,16,18], output[0][1])
-        self.assertEquals([1,3,5,7,9,11,13,15,17,19], output[1][1])
+        self.assertEquals((0, [0,2,4,6,8,10,12,14,16,18]), output[0])
+        self.assertEquals((1, [1,3,5,7,9,11,13,15,17,19]), output[1])
 
     def test_disjoint(self):
         items2 = self.polymer.memory(list(range(10))) \
@@ -95,8 +95,8 @@ class PolymrTest(unittest.TestCase):
                 .run()
 
         output = list(output)
-        self.assertEquals(10 + 12 + 14 + 16 + 18, output[0])
-        self.assertEquals(11 + 13 + 15 + 17 + 19, output[1])
+        self.assertEquals(10 + 12 + 14 + 16 + 18, output[0][1])
+        self.assertEquals(11 + 13 + 15 + 17 + 19, output[1][1])
         
 
 if __name__ == '__main__':

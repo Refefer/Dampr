@@ -19,6 +19,9 @@ class ValueEmitter(object):
     def __iter__(self):
         return self.read()
 
+    def delete(self):
+        self.datasets[0].delete()
+
 class PBase(object):
     def __init__(self, source, pmer):
         assert isinstance(source, Source)

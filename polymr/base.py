@@ -522,14 +522,14 @@ class StageFileSystem(object):
 
 class WorkingFileSystem(object):
     def __init__(self, path):
-        if not os.path.isdir(path):
-            os.makedirs(path)
-
         self.path = path 
 
     def get_file(self, name=None):
         if name is None:
             name = str(uuid.uuid4())
+
+        if not os.path.isdir(self.path):
+            os.makedirs(self.path)
 
         new_file = os.path.join(self.path, name)
         return new_file

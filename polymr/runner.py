@@ -130,8 +130,6 @@ class RunnerBase(object):
             elif isinstance(dataset, Chunker):
                 cd = MergeDataset(list(dataset.chunks()))
             else:
-                import pprint
-                pprint.pprint(dataset)
                 cd = MergeDataset([v for vs in dataset.values() for v in vs])
 
             ret.append(cd)
@@ -142,8 +140,7 @@ class RunnerBase(object):
         for sd in to_delete:
             for ds in data[sd].values():
                 for d in ds:
-                    pass
-                    #d.delete()
+                    d.delete()
 
         return ret
 
@@ -264,7 +261,7 @@ class CombinerStageRunner(StageRunner):
         w_id = os.getpid()
         t_id, datasets = payload
 
-        dw = ContiguousWriter(fs)
+        dw = UnorderedWriter(fs)
         dw.start()
         for k,v in self.combiner.combine(datasets):
             dw.add_record(k,v)
@@ -290,7 +287,7 @@ class ReduceStageRunner(StageRunner):
 
     def execute_stage(self, t_id, payload, output_q):
         fs = self.fs.get_worker('red/{}'.format(t_id))
-        dw = UnorderedWriter(fs)
+        dw = ContiguousWriter(fs)
 
         m = multiprocessing.Process(target=mr_reduce,
             args=(payload, output_q, self.reducer, dw))
@@ -322,9 +319,9 @@ class MTRunner(RunnerBase):
         collapsed = self.collapse_datamappings(finished)
         # Check for number of files
         for k, v in collapsed.items():
-            while len(v) > 10:
+            while len(v) > 50:
                 logging.debug("Partition %s needs to be merged: found %s files", k, len(v))
-                num_files = int(math.ceil(len(v) / 10.))
+                num_files = int(math.ceil(len(v) / 50.))
                 chunks = ((i, v[s:s+num_files])
                         for i, s in enumerate(range(0, len(v), num_files)))
                 c = NoopCombiner() if mapper.combiner is None else mapper.combiner
