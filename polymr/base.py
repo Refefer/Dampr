@@ -139,23 +139,28 @@ class PickledDataset(Dataset):
     __repr__ = __str__
 
 class BufferedSortedWriter(DatasetWriter):
-    def __init__(self, fs, buffer_size=10*1024**2):
+    def __init__(self, fs, buffer_size=10*1024**2, always_to_disk=True):
         self.fs = fs
         self.buffer_size = buffer_size
+        self.always_to_disk = always_to_disk
 
     def start(self):
         self.files = []
         self.buffer = StringIO()
         self.keyoffs = []
 
-    def write_batch(self):
+    def write_batch_to_disk(self):
         path = self.fs.get_file(str(len(self.files)))
-        with gzip.GzipFile(path, 'wb', 1) as f:
+        with open(path, 'wb') as out:
+            self._write_to_gzip(out)
+
+        return path
+
+    def _write_to_gzip(self, f):
+        with gzip.GzipFile(fileobj=f, mode='wb', compresslevel=1) as f:
             dump_pickle(len(self.keyoffs), f)
             for kv in self._sort_kvs():
                 f.write(kv)
-
-        return path
 
     def _sort_kvs(self):
         self.keyoffs.sort(key=lambda x: x[0])
@@ -163,10 +168,17 @@ class BufferedSortedWriter(DatasetWriter):
             self.buffer.seek(start)
             yield self.buffer.read(stop - start)
 
-    def flush(self):
-        file_name = self.write_batch()
+    def flush_to_disk(self):
+        file_name = self.write_batch_to_disk()
         dataset = PickledDataset(file_name)
         self.files.append(dataset)
+        self.buffer.truncate(0)
+        self.keyoffs = []
+
+    def flush_to_memory(self):
+        sio = StringIO()
+        self._write_to_gzip(sio)
+        self.files.append(MemGZipDataset(sio.getvalue()))
         self.buffer.truncate(0)
         self.keyoffs = []
 
@@ -179,11 +191,14 @@ class BufferedSortedWriter(DatasetWriter):
         kvs, kvst = self._write_to_buffer(key, value)
         self.keyoffs.append((key, kvs, kvst))
         if self.buffer.tell() > self.buffer_size:
-            self.flush()
+            self.flush_to_disk()
 
     def finished(self):
         if self.buffer.tell() > 0:
-            self.flush()
+            if self.always_to_disk:
+                self.flush_to_disk()
+            else:
+                self.flush_to_memory()
 
         return {0: self.files}
 
@@ -401,7 +416,7 @@ class NoopCombiner(Combiner):
 
     def combine(self, datasets):
        md = MergeDataset(datasets)
-       return md.read()
+       return StreamDataset(md.read())
 
 class StreamDataset(Dataset):
     def __init__(self, it):
@@ -416,13 +431,16 @@ class StreamDataset(Dataset):
 class PartialReduceCombiner(Combiner):
     def __init__(self, reducer):
         self.reducer = reducer
+    
+    def _combine(self, datasets):
+        for k, vs in MergeDataset(datasets).grouped_read():
+            yield k, self.reducer.reducer(k, vs)
 
     def combine(self, datasets):
-        pass
+        return StreamDataset(self._combine(datasets))
 
 class Shuffler(object):
-    def __init__(self, fs, n_partitions, splitter):
-        self.fs = fs
+    def __init__(self, n_partitions, splitter):
         self.n_partitions = n_partitions
         self.splitter = splitter
 
@@ -441,7 +459,7 @@ class DefaultShuffler(Shuffler):
             partitions.append(writer)
 
         for k, v in MergeDataset(datasets).read():
-            p_idx = self.splitter.partitions(key, self.n_partitions)
+            p_idx = self.splitter.partition(k, self.n_partitions)
             partitions[p_idx].add_record(k, v)
 
         splits = {}

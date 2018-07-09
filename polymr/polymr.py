@@ -5,7 +5,7 @@ import itertools
 import json
 import random
 
-from .base import Mapper, Map, Reduce, Join, TextInput, MemoryInput
+from .base import Mapper, Map, Reduce, Join, TextInput, MemoryInput, PartialReduceCombiner
 from .runner import MTRunner, Graph, Source
 
 class PBase(object):
@@ -44,12 +44,15 @@ class PMap(PBase):
 
         return self._add_map(_sample)
         
-    def checkpoint(self, force=False):
+    def checkpoint(self, force=False, combiner=None):
         if len(self.agg) > 0 or force:
             aggs = [Map(_identity)] if len(self.agg) == 0 else self.agg[:]
             name = ' -> ' .join('{}'.format(a.mapper.__name__) for a in aggs)
             name = 'Stage {}: %s => %s' % (self.source, name)
-            source = self.pmer.graph.add_mapper([self.source], Map(combine(aggs)), name=name)
+            source = self.pmer.graph.add_mapper([self.source], 
+                    Map(combine(aggs)), 
+                    combiner=combiner,
+                    name=name)
             return PMap(source, self.pmer) 
 
         return self
@@ -90,6 +93,14 @@ class PMap(PBase):
         pm = self._add_map(_group_bys).checkpoint()
         return PReduce(pm.source, self.pmer)
 
+    def a_group_by(self, key, vf=lambda x: x):
+        def _a_group_by(_key, value):
+            yield key(value), vf(value)
+
+        # We don't checkpoint here!
+        pm = self._add_map(_a_group_by)
+        return ARReduce(pm)
+
     def sort_by(self, key):
         def _sort_by(_key, value):
             v = key(value)
@@ -105,6 +116,16 @@ class PMap(PBase):
             other = other.checkpoint(True)
 
         return PJoin(left_source, self.pmer, other.source)
+
+class ARReduce(object):
+    def __init__(self, pmap):
+        self.pmap = pmap
+
+    def reduce(self, agg):
+        red = Reduce(agg)
+        # We add the associative aggregator to the combiner during map
+        pm = self.pmap.checkpoint(True, combiner=PartialReduceCombiner(red))
+        return PReduce(pm.source, pm.pmer).reduce(agg)
 
 class PReduce(PBase):
 

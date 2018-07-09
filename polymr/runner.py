@@ -159,22 +159,23 @@ def mr_map(job, out_q, stage, fs, n_partitions):
     out_q.put((w_id, m_id, dw.finished()))
     logging.debug("Mapper: %i: Finished", w_id)
 
-def mrcs_map(job, out_q, mapper, combiner, shuffler, fs, n_partitions):
+def mrcs_map(job, out_q, stage, combiner, shuffler, fs):
     """
     Runs a more fine grained map/combine/shuffler
     """
     w_id = os.getpid()
+    dw = BufferedSortedWriter(fs, always_to_disk=False)
     dw.start()
     m_id, main, supplemental = job
     logging.debug("Mapper %i: Computing map: %i", w_id, m_id)
-    for k, v in mapper.map(main, *supplemental):
+    for k, v in stage.mapper.map(main, *supplemental):
         dw.add_record(k, v)
 
-    sources = dw.finished()
+    sources = dw.finished()[0]
 
     logging.debug("Combining outputs...")
     combined_stream = combiner.combine(sources)
-    results = shuffler.shuffle(fs, combined_streams)
+    results = shuffler.shuffle(fs, [combined_stream])
 
     out_q.put((w_id, m_id, results))
     logging.debug("Mapper: %i: Finished", w_id)
@@ -240,12 +241,15 @@ class MapStageRunner(StageRunner):
 
         if self.mapper.combiner is None and self.mapper.shuffler is None:
 
-            m = multiprocessing.Process(target=mr_map,
+            p = multiprocessing.Process(target=mr_map,
                 args=(payload, output_q, self.mapper, fs, self.n_partitions))
         else:
-            pass
+            c = NoopCombiner() if self.mapper.combiner is None else self.mapper.combiner
+            s = DefaultShuffler(self.n_partitions, Splitter())
+            p = multiprocessing.Process(target=mrcs_map,
+                args=(payload, output_q, self.mapper, c, s, fs))
 
-        return m
+        return p
 
 class ReduceStageRunner(StageRunner):
     def __init__(self, max_procs, fs, reducer):

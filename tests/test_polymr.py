@@ -90,5 +90,16 @@ class PolymrTest(unittest.TestCase):
         output = [v for k,v in output[0]]
         self.assertEquals([], output)
 
+    def test_associative_reduce(self):
+        output = self.items \
+                .a_group_by(lambda x: x % 2) \
+                .reduce(lambda k, vs: sum(vs)) \
+                .run()
+
+        output = [v for k,v in output[0]]
+        self.assertEquals(10 + 12 + 14 + 16 + 18, output[0])
+        self.assertEquals(11 + 13 + 15 + 17 + 19, output[1])
+        
+
 if __name__ == '__main__':
     unittest.main()
