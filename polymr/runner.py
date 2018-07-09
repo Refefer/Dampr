@@ -1,3 +1,4 @@
+import math
 import os
 import logging
 import multiprocessing
@@ -104,7 +105,7 @@ class RunnerBase(object):
             input_data = [data[i] for i in stage.inputs]
             for i, id in enumerate(input_data):
                 logging.info("Input: %s", stage.inputs[i])
-                logging.debug("Source Datasets: %s", id)
+                logging.debug("Datasets: %s", id)
 
             logging.info("Output: %s", stage.output)
 
@@ -130,6 +131,8 @@ class RunnerBase(object):
             elif isinstance(dataset, Chunker):
                 cd = MergeDataset(list(dataset.chunks()))
             else:
+                import pprint
+                pprint.pprint(dataset)
                 cd = MergeDataset([v for vs in dataset.values() for v in vs])
 
             ret.append(cd)
@@ -140,7 +143,8 @@ class RunnerBase(object):
         for sd in to_delete:
             for ds in data[sd].values():
                 for d in ds:
-                    d.delete()
+                    pass
+                    #d.delete()
 
         return ret
 
@@ -237,7 +241,7 @@ class MapStageRunner(StageRunner):
         self.mapper = mapper
 
     def execute_stage(self, t_id, payload, output_q):
-        fs = self.fs.get_worker('red/{}'.format(t_id))
+        fs = self.fs.get_worker('map/{}'.format(t_id))
 
         if self.mapper.combiner is None and self.mapper.shuffler is None:
 
@@ -248,6 +252,34 @@ class MapStageRunner(StageRunner):
             s = DefaultShuffler(self.n_partitions, Splitter())
             p = multiprocessing.Process(target=mrcs_map,
                 args=(payload, output_q, self.mapper, c, s, fs))
+
+        return p
+
+class CombinerStageRunner(StageRunner):
+    def __init__(self, max_procs, fs, combiner):
+        super(CombinerStageRunner, self).__init__(max_procs)
+        self.fs = fs
+        self.combiner = combiner
+
+    def combine(self, payload, output_q, fs):
+        w_id = os.getpid()
+        t_id, datasets = payload
+
+        dw = ContiguousWriter(fs)
+        dw.start()
+        for k,v in self.combiner.combine(datasets):
+            dw.add_record(k,v)
+
+        for d in datasets:
+            d.delete()
+
+        output_q.put((w_id, t_id, dw.finished()[0]))
+
+    def execute_stage(self, t_id, payload, output_q):
+        fs = self.fs.get_worker('merge/{}'.format(t_id))
+
+        p = multiprocessing.Process(target=self.combine,
+            args=(payload, output_q, fs))
 
         return p
 
@@ -288,7 +320,19 @@ class MTRunner(RunnerBase):
 
         finished = msr.run(jobs_queue)
 
-        return self.collapse_datamappings(finished)
+        collapsed = self.collapse_datamappings(finished)
+        # Check for number of files
+        for k, v in collapsed.items():
+            while len(v) > 10:
+                logging.debug("Partition %s needs to be merged: found %s files", k, len(v))
+                num_files = int(math.ceil(len(v) / 10.))
+                chunks = ((i, v[s:s+num_files])
+                        for i, s in enumerate(range(0, len(v), num_files)))
+                csr = CombinerStageRunner(self.n_maps, stage_fs, NoopCombiner())
+                v = [f for fs in csr.run(chunks) for f in fs]
+                collapsed[k] = v
+
+        return collapsed
 
     def run_reducer(self, stage_id, data_mappings, reducer):
         # Collect across inputs

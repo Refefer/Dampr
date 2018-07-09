@@ -5,8 +5,19 @@ import itertools
 import json
 import random
 
-from .base import Mapper, Map, Reduce, Join, TextInput, MemoryInput, PartialReduceCombiner
+from .base import *
 from .runner import MTRunner, Graph, Source
+
+class ValueEmitter(object):
+    def __init__(self, datasets):
+        self.datasets = datasets
+
+    def read(self):
+        for _, v in self.datasets[0].read():
+            yield v
+
+    def __iter__(self):
+        return self.read()
 
 class PBase(object):
     def __init__(self, source, pmer):
@@ -17,7 +28,8 @@ class PBase(object):
     def run(self, name=None):
         name = 'tmp' if name is None else name
         logging.info("run source: %s", self.source)
-        return self.pmer.runner(name, self.pmer.graph).run([self.source])
+        ds = self.pmer.runner(name, self.pmer.graph).run([self.source])
+        return ValueEmitter(ds)
 
 def _identity(k, v):
     yield k, v
@@ -117,6 +129,10 @@ class PMap(PBase):
 
         return PJoin(left_source, self.pmer, other.source)
 
+    def count(self, key=lambda x: x):
+        return self.a_group_by(key, lambda v: 1) \
+                .reduce(lambda k, vs: sum(vs))
+
 class ARReduce(object):
     def __init__(self, pmap):
         self.pmap = pmap
@@ -126,24 +142,18 @@ class ARReduce(object):
         # We add the associative aggregator to the combiner during map
         pm = self.pmap.checkpoint(True, combiner=PartialReduceCombiner(red))
         return PReduce(pm.source, pm.pmer).reduce(agg)
+    
+    def first(self):
+        return self.reduce(lambda k, vs: next(vs))
+
+    def sum(self):
+        return self.reduce(lambda k, vs: sum(vs))
 
 class PReduce(PBase):
 
     def reduce(self, f):
-        new_source = self.pmer.graph.add_reducer([self.source], Reduce(f))
+        new_source = self.pmer.graph.add_reducer([self.source], KeyedReduce(f))
         return PMap(new_source, self.pmer)
-
-    def count(self):
-        def _count(k, it):
-            for i, _ in enumerate(it):
-                pass
-
-            return i + 1
-
-        return self.reduce(_count)
-
-    def first(self):
-        return self.reduce(lambda k, vs: next(vs))
 
     def unique(self, key=lambda x: x):
         def _uniq(k, it):
@@ -166,9 +176,6 @@ class PReduce(PBase):
 
         return PJoin(self.source, self.pmer, other.source)
 
-    def sum(self):
-        return self.reduce(lambda k, vs: sum(vs))
-
 class PJoin(PBase):
 
     def __init__(self, source, pmer, right):
@@ -182,7 +189,7 @@ class PJoin(PBase):
         def _reduce(k, left, right):
             return aggregate(left, right)
 
-        source = self.pmer.graph.add_reducer([self.source, self.right], Join(_reduce))
+        source = self.pmer.graph.add_reducer([self.source, self.right], KeyedJoin(_reduce))
         return PMap(source, self.pmer)
 
     def cross(self):

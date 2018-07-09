@@ -4,6 +4,7 @@ import os
 import itertools
 import heapq
 import gzip
+import exceptions
 
 PY_MAJOR = sys.version_info.major
 
@@ -122,14 +123,22 @@ class DatasetWriter(object):
         raise NotImplementedError()
 
 class PickledDataset(Dataset):
-    def __init__(self, path):
+    def __init__(self, path, header_field=True):
         self.path = path
+        self.header_field = header_field
 
     def read(self):
         with gzip.GzipFile(self.path, 'rb', 1) as f:
-            n_records = pickle.load(f)
-            for _ in range(n_records):
-                yield pickle.load(f)
+            if self.header_field:
+                n_records = pickle.load(f)
+                for _ in range(n_records):
+                    yield pickle.load(f)
+            else:
+                try:
+                    while True:
+                        yield pickle.load(f)
+                except EOFError:
+                    pass
 
     def delete(self):
         os.unlink(self.path)
@@ -237,6 +246,22 @@ class MemGZipDataset(Dataset):
     def delete(self):
         pass
 
+class ContiguousWriter(DatasetWriter):
+    def __init__(self, worker_fs):
+        super(ContiguousWriter, self).__init__(worker_fs)
+        self.worker_fs = worker_fs
+    
+    def start(self):
+        self.fname = self.worker_fs.get_file()
+        self.f = gzip.GzipFile(self.fname, 'wb', 1)
+    
+    def add_record(self, key, value):
+        dump_pickle((key, value), self.f)
+
+    def finished(self):
+        self.f.close()
+        return {0: [PickledDataset(self.fname, False)]}
+
 class UnorderedWriter(DatasetWriter):
     def __init__(self, worker_fs, chunk_size=64*1024*1024, always_to_disk=False):
         super(UnorderedWriter, self).__init__(worker_fs)
@@ -255,7 +280,6 @@ class UnorderedWriter(DatasetWriter):
             while data:
                 f.write(data)
                 data = buf.read(4096)
-
 
     def flush(self):
         buf = self.buffer
@@ -382,6 +406,11 @@ class Reduce(Reducer):
         for k, vs in self.yield_groups(datasets[0]):
             yield k, self.reducer(k, vs)
 
+class KeyedReduce(Reduce):
+    def reduce(self, *datasets):
+        for k, v in super(KeyedReduce, self).reduce(*datasets):
+            yield k, (k, v)
+
 class Join(Reducer):
     def __init__(self, joiner_f):
         self.joiner_f = joiner_f
@@ -401,6 +430,11 @@ class Join(Reducer):
                 yield k, self.joiner_f(k, left[1], right[1])
                 left, right = next(g1, None), next(g2, None)
 
+class KeyedJoin(Join):
+    def reduce(self, *datasets):
+        for k, v in super(KeyedJoin, self).reduce(*datasets):
+            yield k, (k, v)
+
 class Combiner(object):
     """
     Interface for the combining ordered chunks from the Map stage
@@ -417,6 +451,10 @@ class NoopCombiner(Combiner):
     def combine(self, datasets):
        md = MergeDataset(datasets)
        return StreamDataset(md.read())
+
+class UnorderedCombiner(Combiner):
+    def combine(self, datasets):
+        return CatDataset(datasets)
 
 class StreamDataset(Dataset):
     def __init__(self, it):
