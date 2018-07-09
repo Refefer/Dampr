@@ -105,7 +105,6 @@ class RunnerBase(object):
             input_data = [data[i] for i in stage.inputs]
             for i, id in enumerate(input_data):
                 logging.info("Input: %s", stage.inputs[i])
-                logging.debug("Datasets: %s", id)
 
             logging.info("Output: %s", stage.output)
 
@@ -328,7 +327,8 @@ class MTRunner(RunnerBase):
                 num_files = int(math.ceil(len(v) / 10.))
                 chunks = ((i, v[s:s+num_files])
                         for i, s in enumerate(range(0, len(v), num_files)))
-                csr = CombinerStageRunner(self.n_maps, stage_fs, NoopCombiner())
+                c = NoopCombiner() if mapper.combiner is None else mapper.combiner
+                csr = CombinerStageRunner(self.n_maps, stage_fs, c)
                 v = [f for fs in csr.run(chunks) for f in fs]
                 collapsed[k] = v
 
