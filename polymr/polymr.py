@@ -1,12 +1,12 @@
+import sys
 import time
 import logging
-import collections
-import itertools
 import json
 import random
 
 from .base import *
 from .runner import MTRunner, Graph, Source
+from .inputs import MemoryInput, TextInput
 
 class ValueEmitter(object):
     def __init__(self, datasets):
@@ -126,12 +126,24 @@ class PMap(PBase):
         return self.a_group_by(key, lambda v: 1) \
                 .reduce(lambda k, vs: sum(vs))
 
-    def inspect(self, prefix=""):
+    def inspect(self, prefix="", run_exit=False):
         def _inspect(k, v):
             print("{}: {}".format(prefix, v))
             yield k, v
 
-        return self._add_map(_inspect)
+        ins = self._add_map(_inspect)
+        if run_exit:
+            ins.run()
+            sys.exit(0)
+
+        return ins
+
+    def cached(self):
+        # Run the pipeline, load it into memory, and create a new graph
+        results = self.checkpoint().run()
+        p = Polymr().memory(list(results.read()))
+        results.delete()
+        return p
 
 class ARReduce(object):
     def __init__(self, pmap):
@@ -212,8 +224,8 @@ class Polymr(object):
 
         self.runner = runner
 
-    def memory(self, items):
-        mi = MemoryInput(list(enumerate(items)))
+    def memory(self, items, chunk_size=1000):
+        mi = MemoryInput(list(enumerate(items)), chunk_size)
         source = self.graph.add_input(mi)
         return PMap(source, self)
 

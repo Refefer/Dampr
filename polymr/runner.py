@@ -7,6 +7,8 @@ from multiprocessing.queues import Empty
 import tempfile
 
 from .base import *
+from .dataset import *
+from .inputs import Chunker, DMChunker
 
 CPUS = multiprocessing.cpu_count()
 
