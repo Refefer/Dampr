@@ -81,10 +81,12 @@ class PolymrTest(unittest.TestCase):
     def test_repartition(self):
         items2 = self.polymer.memory(list(range(10))) \
                 .group_by(lambda x: -x) \
-                .reduce(lambda k, vs: sum(vs))
+                    .reduce(lambda k, vs: sum(vs))
+
         output = self.items.group_by(lambda x: x) \
                 .join(items2) \
                 .run()
+
         output = [v for k,v in output]
         self.assertEquals([], output)
 

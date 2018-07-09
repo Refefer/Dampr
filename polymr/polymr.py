@@ -64,11 +64,11 @@ class PMap(PBase):
             aggs = [Map(_identity)] if len(self.agg) == 0 else self.agg[:]
             name = ' -> ' .join('{}'.format(a.mapper.__name__) for a in aggs)
             name = 'Stage {}: %s => %s' % (self.source, name)
-            source = self.pmer.graph.add_mapper([self.source], 
+            source, pmer = self.pmer._add_mapper([self.source], 
                     Map(combine(aggs)), 
                     combiner=combiner,
                     name=name)
-            return PMap(source, self.pmer) 
+            return PMap(source, pmer) 
 
         return self
 
@@ -97,7 +97,7 @@ class PMap(PBase):
             yield key(value), vf(value)
 
         pm = self._add_map(_group_by).checkpoint()
-        return PReduce(pm.source, self.pmer)
+        return PReduce(pm.source, pm.pmer)
 
     def a_group_by(self, key, vf=lambda x: x):
         def _a_group_by(_key, value):
@@ -112,15 +112,16 @@ class PMap(PBase):
             yield key(value), value
 
         pm = self._add_map(_sort_by).checkpoint()
-        return PReduce(pm.source, self.pmer)
+        return PReduce(pm.source, pm.pmer)
 
     def join(self, other):
         assert isinstance(other, PBase)
-        left_source = self.checkpoint(True).source
+        me = self.checkpoint(True)
         if isinstance(other, PMap):
             other = other.checkpoint(True)
 
-        return PJoin(left_source, self.pmer, other.source)
+        pmer = Polymr(me.pmer.graph.union(other.pmer.graph))
+        return PJoin(me.source, pmer, other.source)
 
     def count(self, key=lambda x: x):
         return self.a_group_by(key, lambda v: 1) \
@@ -164,8 +165,8 @@ class ARReduce(object):
 class PReduce(PBase):
 
     def reduce(self, f):
-        new_source = self.pmer.graph.add_reducer([self.source], KeyedReduce(f))
-        return PMap(new_source, self.pmer)
+        new_source, pmer = self.pmer._add_reducer([self.source], KeyedReduce(f))
+        return PMap(new_source, pmer)
 
     def unique(self, key=lambda x: x):
         def _uniq(k, it):
@@ -186,7 +187,8 @@ class PReduce(PBase):
         if isinstance(other, PMap):
             other = other.checkpoint(True)
 
-        return PJoin(self.source, self.pmer, other.source)
+        pmer = Polymr(self.pmer.graph.union(other.pmer.graph))
+        return PJoin(self.source, pmer, other.source)
 
 class PJoin(PBase):
 
@@ -201,17 +203,17 @@ class PJoin(PBase):
         def _reduce(k, left, right):
             return aggregate(left, right)
 
-        source = self.pmer.graph.add_reducer([self.source, self.right], 
+        source, pmer = self.pmer._add_reducer([self.source, self.right], 
                 KeyedInnerJoin(_reduce))
-        return PMap(source, self.pmer)
+        return PMap(source, pmer)
 
     def left_reduce(self, aggregate):
         def _reduce(k, left, right):
             return aggregate(left, right)
 
-        source = self.pmer.graph.add_reducer([self.source, self.right], 
+        source, pmer = self.pmer._add_reducer([self.source, self.right], 
                 KeyedLeftJoin(_reduce))
-        return PMap(source, self.pmer)
+        return PMap(source, pmer)
 
 class Polymr(object):
     def __init__(self, graph=None, runner=None):
@@ -226,15 +228,24 @@ class Polymr(object):
 
     def memory(self, items, chunk_size=1000):
         mi = MemoryInput(list(enumerate(items)), chunk_size)
-        source = self.graph.add_input(mi)
-        return PMap(source, self)
+        source, ng = self.graph.add_input(mi)
+        return PMap(source, Polymr(ng))
 
     def text(self, fname):
-        source = self.graph.add_input(TextInput(fname))
-        return PMap(source, self)
+        source, ng = self.graph.add_input(TextInput(fname))
+        return PMap(source, Polymr(ng))
 
     def json(self, fname):
         return self.text(fname).map(json.loads)
+
+    def _add_mapper(self, *args, **kwargs): 
+        output, ng = self.graph.add_mapper(*args, **kwargs)
+        return output, Polymr(ng)
+
+    def _add_reducer(self, *args, **kwargs): 
+        output, ng = self.graph.add_reducer(*args, **kwargs)
+        return output, Polymr(ng)
+
 
 def combine(aggs):
     if len(aggs) == 1:

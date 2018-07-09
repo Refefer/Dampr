@@ -13,14 +13,17 @@ from .inputs import Chunker, DMChunker
 CPUS = multiprocessing.cpu_count()
 
 class Source(object):
+    CNT = 0
     def __init__(self, name):
         self.name = name
+        self.cnt = self.CNT
+        type(self).CNT += 1
 
     def __hash__(self):
-        return hash(self.name)
+        return hash(self.cnt)
 
     def __eq__(self, other):
-        return self.name == other.name
+        return self.cnt == other.cnt
 
     def __str__(self):
         return "Source[`{}`]".format(self.name)
@@ -46,10 +49,17 @@ class Graph(object):
         self.inputs = {}
         self.stages = []
 
+    def _copy_graph(self):
+        graph = Graph()
+        graph.inputs.update(self.inputs)
+        graph.stages.extend(self.stages)
+        return graph
+
     def add_input(self, dataset):
+        ng = self._copy_graph()
         inp = Source('Input:{}'. format(len(self.inputs)))
-        self.inputs[inp] = dataset
-        return inp
+        ng.inputs[inp] = dataset
+        return inp, ng
 
     def add_mapper(self, inputs, mapper, combiner=None, shuffler=None, name=None):
         assert isinstance(mapper, Mapper)
@@ -60,8 +70,9 @@ class Graph(object):
             name = 'Map: {}'
 
         inp = Source(name.format(len(self.stages)))
-        self.stages.append(GMap(inp, inputs, mapper, combiner, shuffler))
-        return inp
+        ng = self._copy_graph()
+        ng.stages.append(GMap(inp, inputs, mapper, combiner, shuffler))
+        return inp, ng
 
     def add_reducer(self, inputs, reducer, name=None):
         assert isinstance(reducer, Reducer)
@@ -70,9 +81,20 @@ class Graph(object):
             name = 'Reduce: {}'
 
         inp = Source(name.format(len(self.stages)))
-        self.stages.append(GReduce(inp, inputs, reducer))
-        return inp
+        ng = self._copy_graph()
+        ng.stages.append(GReduce(inp, inputs, reducer))
+        return inp, ng
 
+    def union(self, other_graph):
+        ng = self._copy_graph()
+        ng.inputs.update(other_graph.inputs)
+        seen_stages = set(ng.stages)
+        for s in other_graph.stages:
+            if s not in seen_stages:
+                ng.stages.append(s)
+
+        return ng
+        
 class RunnerBase(object):
     def __init__(self, name, graph, working_dir='/tmp'):
 
