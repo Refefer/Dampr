@@ -98,6 +98,19 @@ class PolymrTest(unittest.TestCase):
         self.assertEquals(10 + 12 + 14 + 16 + 18, output[0][1])
         self.assertEquals(11 + 13 + 15 + 17 + 19, output[1][1])
         
+    def test_left_join(self):
+        to_remove = self.polymer.memory(list(range(10, 13)))
+        
+        output = self.items.group_by(lambda x: x) \
+                .join(to_remove.group_by(lambda x: x)) \
+                    .left_reduce(lambda l, r: (list(l), list(r))) \
+                .filter(lambda llrs: len(llrs[1][1]) == 0) \
+                .map(lambda llrs: llrs[1][0][0]) \
+                .sort_by(lambda x: x) \
+                .run()
+
+        output = list(output)
+        self.assertEquals(list(range(13,20)), output)
 
 if __name__ == '__main__':
     unittest.main()

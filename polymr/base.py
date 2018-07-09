@@ -411,7 +411,7 @@ class KeyedReduce(Reduce):
         for k, v in super(KeyedReduce, self).reduce(*datasets):
             yield k, (k, v)
 
-class Join(Reducer):
+class InnerJoin(Reducer):
     def __init__(self, joiner_f):
         self.joiner_f = joiner_f
 
@@ -430,9 +430,40 @@ class Join(Reducer):
                 yield k, self.joiner_f(k, left[1], right[1])
                 left, right = next(g1, None), next(g2, None)
 
-class KeyedJoin(Join):
+class KeyedInnerJoin(InnerJoin):
     def reduce(self, *datasets):
-        for k, v in super(KeyedJoin, self).reduce(*datasets):
+        for k, v in super(KeyedInnerJoin, self).reduce(*datasets):
+            yield k, (k, v)
+
+class LeftJoin(Reducer):
+    def __init__(self, joiner_f):
+        self.joiner_f = joiner_f
+
+    def reduce(self, *datasets):
+        assert len(datasets) == 2
+        g1 = self.yield_groups(datasets[0])
+        g2 = self.yield_groups(datasets[1])
+        left, right = next(g1, None), next(g2, None)
+        while left is not None and right is not None:
+            k = left[0]
+            if left[0] < right[0]:
+                yield k, self.joiner_f(k, left[1], iter([]))
+                left = next(g1, None)
+            elif left[0] > right[0]:
+                right = next(g2, None)
+            else:
+                yield k, self.joiner_f(k, left[1], right[1])
+                left, right = next(g1, None), next(g2, None)
+
+        # Finish off left
+        while left is not None:
+            k = left[0]
+            yield k, self.joiner_f(k, left[1], iter([]))
+            left = next(g1, None)
+
+class KeyedLeftJoin(LeftJoin):
+    def reduce(self, *datasets):
+        for k, v in super(KeyedLeftJoin, self).reduce(*datasets):
             yield k, (k, v)
 
 class Combiner(object):

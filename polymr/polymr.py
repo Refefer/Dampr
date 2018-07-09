@@ -99,15 +99,6 @@ class PMap(PBase):
         pm = self._add_map(_group_by).checkpoint()
         return PReduce(pm.source, self.pmer)
 
-    def group_bys(self, key, vf=lambda x: x):
-        def _group_bys(_key, value):
-            keys = key(value)
-            for k in keys:
-                yield k, vf(value)
-
-        pm = self._add_map(_group_bys).checkpoint()
-        return PReduce(pm.source, self.pmer)
-
     def a_group_by(self, key, vf=lambda x: x):
         def _a_group_by(_key, value):
             yield key(value), vf(value)
@@ -118,8 +109,7 @@ class PMap(PBase):
 
     def sort_by(self, key):
         def _sort_by(_key, value):
-            v = key(value)
-            yield v, value
+            yield key(value), value
 
         pm = self._add_map(_sort_by).checkpoint()
         return PReduce(pm.source, self.pmer)
@@ -135,6 +125,13 @@ class PMap(PBase):
     def count(self, key=lambda x: x):
         return self.a_group_by(key, lambda v: 1) \
                 .reduce(lambda k, vs: sum(vs))
+
+    def inspect(self, prefix=""):
+        def _inspect(k, v):
+            print("{}: {}".format(prefix, v))
+            yield k, v
+
+        return self._add_map(_inspect)
 
 class ARReduce(object):
     def __init__(self, pmap):
@@ -192,20 +189,17 @@ class PJoin(PBase):
         def _reduce(k, left, right):
             return aggregate(left, right)
 
-        source = self.pmer.graph.add_reducer([self.source, self.right], KeyedJoin(_reduce))
+        source = self.pmer.graph.add_reducer([self.source, self.right], 
+                KeyedInnerJoin(_reduce))
         return PMap(source, self.pmer)
 
-    def cross(self):
-        def _cross(left, right):
-            right = list(right)
-            agg = []
-            for l in left:
-                for r in right:
-                    agg.append(l, r)
+    def left_reduce(self, aggregate):
+        def _reduce(k, left, right):
+            return aggregate(left, right)
 
-            return agg
-
-        return self.reduce(_cross).flat_map(lambda x: iter(x))
+        source = self.pmer.graph.add_reducer([self.source, self.right], 
+                KeyedLeftJoin(_reduce))
+        return PMap(source, self.pmer)
 
 class Polymr(object):
     def __init__(self, graph=None, runner=None):
