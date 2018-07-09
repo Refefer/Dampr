@@ -11,10 +11,10 @@ def main(fname):
     polymr = Polymr()
     wc = polymr.text(fname) \
             .map(lambda v: len(v.split())) \
-            .group_by(lambda x: 1) \
+            .a_group_by(lambda x: 1) \
             .sum()
 
-    results = wc.run("word-count")[0]
+    results = wc.run("word-count")
     for k, v in results.read():
         print("Word Count:", v)
 
