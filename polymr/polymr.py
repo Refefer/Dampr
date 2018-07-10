@@ -12,12 +12,15 @@ class ValueEmitter(object):
     def __init__(self, datasets):
         self.datasets = datasets
 
-    def read(self):
+    def stream(self):
         for _, v in self.datasets[0].read():
             yield v
 
+    def read(self):
+        return [v for k,v in self.datasets[0].read()]
+
     def __iter__(self):
-        return self.read()
+        return self.stream()
 
     def delete(self):
         self.datasets[0].delete()
@@ -139,10 +142,10 @@ class PMap(PBase):
 
         return ins
 
-    def cached(self):
+    def cached(self, partitions=50):
         # Run the pipeline, load it into memory, and create a new graph
         results = self.checkpoint().run()
-        p = Polymr().memory(list(results.read()))
+        p = Polymr().memory(list(results.read()), partitions)
         results.delete()
         return p
 
@@ -226,8 +229,8 @@ class Polymr(object):
 
         self.runner = runner
 
-    def memory(self, items, chunk_size=1000):
-        mi = MemoryInput(list(enumerate(items)), chunk_size)
+    def memory(self, items, partitions=50):
+        mi = MemoryInput(list(enumerate(items)), partitions)
         source, ng = self.graph.add_input(mi)
         return PMap(source, Polymr(ng))
 

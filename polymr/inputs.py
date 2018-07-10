@@ -18,13 +18,14 @@ class TextInput(Chunker):
             offset += self.chunk_size
 
 class MemoryInput(Chunker):
-    def __init__(self, items, chunk_size=1000):
+    def __init__(self, items, partitions=50):
         self.items = items
-        self.chunk_size = chunk_size
+        self.partitions = min(len(items), partitions)
 
     def chunks(self):
-        for start in range(0, len(self.items), self.chunk_size):
-            yield MemoryDataset(self.items[start:start+self.chunk_size])
+        chunk_size = int(len(self.items) // float(self.partitions))
+        for start in range(0, len(self.items), chunk_size):
+            yield MemoryDataset(self.items[start:start+chunk_size])
 
 class DMChunker(Chunker):
     def __init__(self, data_mapping):

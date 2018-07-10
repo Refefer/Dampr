@@ -107,6 +107,7 @@ class PickledDataset(Dataset):
         return 'PickledDataset[path={}]'.format(self.path)
     __repr__ = __str__
 
+
 class BufferedSortedWriter(DatasetWriter):
     def __init__(self, fs, buffer_size=10*1024**2, always_to_disk=True):
         self.fs = fs
@@ -128,8 +129,22 @@ class BufferedSortedWriter(DatasetWriter):
     def _write_to_gzip(self, f):
         with gzip.GzipFile(fileobj=f, mode='wb', compresslevel=1) as f:
             dump_pickle(len(self.keyoffs), f)
-            for kv in self._sort_kvs():
+            for kv in self._buffered_kv_writes(self._sort_kvs()):
                 f.write(kv)
+
+    def _buffered_kv_writes(self, it, max_size=4096):
+        b = []
+        size = 0
+        for kv in it:
+            b.append(kv)
+            size += len(kv)
+            if size > max_size:
+                yield ''.join(b)
+                size = 0
+                del b[:]
+
+        if len(b) > 0:
+            yield ''.join(b)
 
     def _sort_kvs(self):
         self.keyoffs.sort(key=lambda x: x[0])

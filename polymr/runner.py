@@ -106,6 +106,18 @@ class RunnerBase(object):
 
     def run_reduce(self, stage_id, data, reducer):
         raise NotImplementedError()
+
+    def format_outputs(self, outputs):
+        new_ret = []
+        for output in outputs:
+            if len(output) == 1:
+                output = output[0]
+            else:
+                output = MergeDataset(output)
+
+            new_ret.append(output)
+        
+        return new_ret
         
     def collapse_datamappings(self, data_mappings):
         new_data = {}
@@ -150,15 +162,17 @@ class RunnerBase(object):
         for source in outputs:
             dataset = data[source]
             if isinstance(dataset, Dataset):
-                cd = source
+                cd = [source]
             elif isinstance(dataset, Chunker):
-                cd = MergeDataset(list(dataset.chunks()))
+                cd = list(dataset.chunks())
             else:
-                cd = MergeDataset([v for vs in dataset.values() for v in vs])
+                cd = [v for vs in dataset.values() for v in vs]
 
             ret.append(cd)
             if source in to_delete:
                 to_delete.remove(source)
+
+        ret = self.format_outputs(ret)
 
         # Cleanup
         for sd in to_delete:
@@ -197,8 +211,12 @@ def mrcs_map(job, out_q, stage, combiner, shuffler, fs):
 
     sources = dw.finished()[0]
 
-    logging.debug("Combining outputs...")
-    combined_stream = combiner.combine(sources)
+    if len(sources) > 1:
+        logging.debug("Combining outputs: found %i files", len(sources))
+        combined_stream = combiner.combine(sources)
+    else:
+        combined_stream = sources[0]
+
     results = shuffler.shuffle(fs, [combined_stream])
 
     out_q.put((w_id, m_id, results))
@@ -208,7 +226,7 @@ def mr_reduce(job, out_q, stage, dw):
     w_id = os.getpid()
     dw.start()
     r_id, datasets= job
-    logging.debug("Reducer %i: Computing map: %i", w_id, r_id)
+    logging.debug("Reducer %i: Computing reduce: %i", w_id, r_id)
     for k, v in stage.reducer.reduce(*datasets):
         dw.add_record(k, v)
 
@@ -285,7 +303,7 @@ class CombinerStageRunner(StageRunner):
         w_id = os.getpid()
         t_id, datasets = payload
 
-        dw = UnorderedWriter(fs)
+        dw = ContiguousWriter(fs)
         dw.start()
         for k,v in self.combiner.combine(datasets):
             dw.add_record(k,v)
@@ -312,6 +330,7 @@ class ReduceStageRunner(StageRunner):
     def execute_stage(self, t_id, payload, output_q):
         fs = self.fs.get_worker('red/{}'.format(t_id))
         dw = ContiguousWriter(fs)
+        #dw = UnorderedWriter(fs)
 
         m = multiprocessing.Process(target=mr_reduce,
             args=(payload, output_q, self.reducer, dw))
@@ -322,7 +341,8 @@ class MTRunner(RunnerBase):
     def __init__(self, name, graph, 
             n_maps=CPUS, 
             n_reducers=CPUS,
-            n_partitions=None):
+            n_partitions=None,
+            max_files_per_stage=50):
         super(MTRunner, self).__init__(name, graph)
         self.n_maps = n_maps
         self.n_reducers = n_reducers
@@ -331,6 +351,13 @@ class MTRunner(RunnerBase):
             n_partitions = n_reducers * 4
 
         self.n_partitions = n_partitions
+        self.max_files_per_stage = max_files_per_stage
+
+    def chunk_list(self, v):
+        chunks = min(self.max_files_per_stage, self.n_maps)
+        num_files = min(int(math.ceil(len(v) / float(chunks))), self.max_files_per_stage)
+        return ((i, v[s:s+num_files])
+                for i, s in enumerate(range(0, len(v), num_files)))
 
     def run_map(self, stage_id, data_mappings, mapper):
         # if we get more than two input mappings, we only iterate over the first one
@@ -347,11 +374,9 @@ class MTRunner(RunnerBase):
         collapsed = self.collapse_datamappings(finished)
         # Check for number of files
         for k, v in collapsed.items():
-            while len(v) > 50:
+            while len(v) > self.max_files_per_stage:
                 logging.debug("Partition %s needs to be merged: found %s files", k, len(v))
-                num_files = int(math.ceil(len(v) / 50.))
-                chunks = ((i, v[s:s+num_files])
-                        for i, s in enumerate(range(0, len(v), num_files)))
+                chunks = self.chunk_list(v)
                 c = NoopCombiner() if mapper.combiner is None else mapper.combiner
                 csr = CombinerStageRunner(self.n_maps, stage_fs, c)
                 v = [f for fs in csr.run(chunks) for f in fs]
@@ -372,3 +397,32 @@ class MTRunner(RunnerBase):
         finished = rds.run(iter(transpose.items()))
 
         return self.collapse_datamappings(finished)
+
+    def format_outputs(self, outputs):
+        
+        was_mapped = len(self.graph.stages) == 0 or \
+                isinstance(self.graph.stages[-1], GMap)
+
+        # if mapped, we ordered the output so we use a merged dataset
+        reduction = 0
+        ret = []
+        for output in outputs:
+            while len(output) > self.max_files_per_stage:
+                stage_fs = self.file_system.get_stage('final_combine')
+
+                reduction += 1
+
+                logging.debug("Combining final files: found %i", len(output))
+                c = NoopCombiner() if was_mapped else UnorderedCombiner()
+                csr = CombinerStageRunner(self.n_maps, stage_fs, c)
+                jobs = self.chunk_list(output)
+                output = [p for ps in csr.run(jobs) for p in ps]
+
+            if len(output) == 1:
+                output = output[0]
+            else:
+                output = MergeDataset(output)
+
+            ret.append(output)
+
+        return ret

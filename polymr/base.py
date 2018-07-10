@@ -162,8 +162,7 @@ class Combiner(object):
 class NoopCombiner(Combiner):
 
     def combine(self, datasets):
-       md = MergeDataset(datasets)
-       return StreamDataset(md.read())
+       return MergeDataset(datasets)
 
 class UnorderedCombiner(Combiner):
     def combine(self, datasets):
