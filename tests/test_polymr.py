@@ -6,8 +6,7 @@ from polymr import Polymr
 class PolymrTest(unittest.TestCase):
     def setUp(self):
         items = list(range(10, 20))
-        self.polymer = Polymr()
-        self.items = self.polymer.memory(items)
+        self.items = Polymr.memory(items)
 
     def test_identity(self):
         results = self.items.run()
@@ -58,7 +57,7 @@ class PolymrTest(unittest.TestCase):
         self.assertEquals([19,18,17,16,15,14,13,12,11,10],list(res))
 
     def test_reduce_join(self):
-        items2 = self.polymer.memory(list(range(10)))
+        items2 = Polymr.memory(list(range(10)))
         res = self.items \
                 .group_by(lambda x: x % 2) \
                 .join(items2.group_by(lambda x: x % 2)) \
@@ -70,7 +69,7 @@ class PolymrTest(unittest.TestCase):
         self.assertEquals((1, [1,3,5,7,9,11,13,15,17,19]), output[1])
 
     def test_disjoint(self):
-        items2 = self.polymer.memory(list(range(10))) \
+        items2 = Polymr.memory(list(range(10))) \
                 .group_by(lambda x: -x)
         output = self.items.group_by(lambda x: x) \
                 .join(items2) \
@@ -79,7 +78,7 @@ class PolymrTest(unittest.TestCase):
         self.assertEquals([], output)
 
     def test_repartition(self):
-        items2 = self.polymer.memory(list(range(10))) \
+        items2 = Polymr.memory(list(range(10))) \
                 .group_by(lambda x: -x) \
                     .reduce(lambda k, vs: sum(vs))
 
@@ -101,7 +100,7 @@ class PolymrTest(unittest.TestCase):
         self.assertEquals(11 + 13 + 15 + 17 + 19, output[1][1])
         
     def test_left_join(self):
-        to_remove = self.polymer.memory(list(range(10, 13)))
+        to_remove = Polymr.memory(list(range(10, 13)))
         
         output = self.items.group_by(lambda x: x) \
                 .join(to_remove.group_by(lambda x: x)) \

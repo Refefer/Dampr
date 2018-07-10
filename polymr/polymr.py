@@ -31,10 +31,11 @@ class PBase(object):
         self.source = source
         self.pmer = pmer
 
-    def run(self, name=None):
-        name = 'tmp' if name is None else name
-        logging.info("run source: %s", self.source)
-        ds = self.pmer.runner(name, self.pmer.graph).run([self.source])
+    def run(self, name=None, **kwargs):
+        if name is None:
+            name = 'polymr/{}'.format(random.random())
+        logging.debug("run source: %s", self.source)
+        ds = self.pmer.runner(name, self.pmer.graph, **kwargs).run([self.source])
         return ValueEmitter(ds)
 
 def _identity(k, v):
@@ -229,17 +230,20 @@ class Polymr(object):
 
         self.runner = runner
 
-    def memory(self, items, partitions=50):
+    @classmethod
+    def memory(cls, items, partitions=50):
         mi = MemoryInput(list(enumerate(items)), partitions)
-        source, ng = self.graph.add_input(mi)
+        source, ng = Graph().add_input(mi)
         return PMap(source, Polymr(ng))
 
-    def text(self, fname):
-        source, ng = self.graph.add_input(TextInput(fname))
+    @classmethod
+    def text(cls, fname):
+        source, ng = Graph().add_input(TextInput(fname))
         return PMap(source, Polymr(ng))
 
-    def json(self, fname):
-        return self.text(fname).map(json.loads)
+    @classmethod
+    def json(cls, fname):
+        return cls.text(fname).map(json.loads)
 
     def _add_mapper(self, *args, **kwargs): 
         output, ng = self.graph.add_mapper(*args, **kwargs)

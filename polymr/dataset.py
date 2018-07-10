@@ -114,8 +114,10 @@ class BufferedWriter(object):
         self.max_size = max_size
         self.buffer = []
         self.size = 0
+        self.empty = True
 
     def write(self, data):
+        self.empty = False
         self.buffer.append(data)
         self.size += len(data)
         if self.size > self.max_size:
@@ -246,6 +248,11 @@ class ContiguousWriter(DatasetWriter):
         dump_pickle((key, value), self.f)
 
     def finished(self):
+        if self.f.empty:
+            self.f.close()
+            os.unlink(self.fname)
+            return {0: []}
+
         self.f.close()
         return {0: [PickledDataset(self.fname, False)]}
 

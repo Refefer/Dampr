@@ -213,6 +213,7 @@ def mrcs_map(job, out_q, stage, combiner, shuffler, fs):
 
     if len(sources) > 1:
         logging.debug("Combining outputs: found %i files", len(sources))
+        logging.debug("Combining: %s", sources)
         combined_stream = combiner.combine(sources)
     else:
         combined_stream = sources[0]
@@ -341,15 +342,11 @@ class MTRunner(RunnerBase):
     def __init__(self, name, graph, 
             n_maps=CPUS, 
             n_reducers=CPUS,
-            n_partitions=None,
+            n_partitions=91,
             max_files_per_stage=50):
         super(MTRunner, self).__init__(name, graph)
         self.n_maps = n_maps
         self.n_reducers = n_reducers
-
-        if n_partitions is None:
-            n_partitions = n_reducers * 4
-
         self.n_partitions = n_partitions
         self.max_files_per_stage = max_files_per_stage
 
@@ -420,6 +417,9 @@ class MTRunner(RunnerBase):
 
             if len(output) == 1:
                 output = output[0]
+
+            elif was_mapped:
+                output = CatDataset(output)
             else:
                 output = MergeDataset(output)
 

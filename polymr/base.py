@@ -1,7 +1,7 @@
 import uuid
 import os
 
-from .dataset import UnorderedWriter, StreamDataset, MergeDataset, EmptyDataset
+from .dataset import UnorderedWriter, StreamDataset, MergeDataset, EmptyDataset, CatDataset
 
 class Splitter(object):
     def partition(self, key, n_partitions):
