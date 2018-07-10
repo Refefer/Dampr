@@ -108,6 +108,29 @@ class PickledDataset(Dataset):
     __repr__ = __str__
 
 
+class BufferedWriter(object):
+    def __init__(self, f, max_size=4096):
+        self.f = f
+        self.max_size = max_size
+        self.buffer = []
+        self.size = 0
+
+    def write(self, data):
+        self.buffer.append(data)
+        self.size += len(data)
+        if self.size > self.max_size:
+            self.flush()
+
+    def flush(self):
+        self.f.write(''.join(self.buffer))
+        self.f.flush()
+        del self.buffer[:]
+        self.size = 0
+
+    def close(self):
+        self.flush()
+        self.f.close()
+ 
 class BufferedSortedWriter(DatasetWriter):
     def __init__(self, fs, buffer_size=10*1024**2, always_to_disk=True):
         self.fs = fs
@@ -129,22 +152,11 @@ class BufferedSortedWriter(DatasetWriter):
     def _write_to_gzip(self, f):
         with gzip.GzipFile(fileobj=f, mode='wb', compresslevel=1) as f:
             dump_pickle(len(self.keyoffs), f)
-            for kv in self._buffered_kv_writes(self._sort_kvs()):
-                f.write(kv)
+            bw = BufferedWriter(f)
+            for kv in self._sort_kvs():
+                bw.write(kv)
 
-    def _buffered_kv_writes(self, it, max_size=4096):
-        b = []
-        size = 0
-        for kv in it:
-            b.append(kv)
-            size += len(kv)
-            if size > max_size:
-                yield ''.join(b)
-                size = 0
-                del b[:]
-
-        if len(b) > 0:
-            yield ''.join(b)
+            bw.flush()
 
     def _sort_kvs(self):
         self.keyoffs.sort(key=lambda x: x[0])
@@ -228,7 +240,7 @@ class ContiguousWriter(DatasetWriter):
     
     def start(self):
         self.fname = self.worker_fs.get_file()
-        self.f = gzip.GzipFile(self.fname, 'wb', 1)
+        self.f = BufferedWriter(gzip.GzipFile(self.fname, 'wb', 1))
     
     def add_record(self, key, value):
         dump_pickle((key, value), self.f)
@@ -251,10 +263,10 @@ class UnorderedWriter(DatasetWriter):
             dump_pickle(self.records, f)
 
             buf.seek(0)
-            data = buf.read(4096)
+            data = buf.read(4096 * 4)
             while data:
                 f.write(data)
-                data = buf.read(4096)
+                data = buf.read(4096 * 4)
 
     def flush(self):
         buf = self.buffer
