@@ -8,7 +8,6 @@ import tempfile
 
 from .base import *
 from .dataset import *
-from .inputs import Chunker, DMChunker
 
 CPUS = multiprocessing.cpu_count()
 
@@ -156,13 +155,12 @@ class RunnerBase(object):
             data[stage.output] = data_mapping
             to_delete.add(stage.output)
 
-        logging.info("Finished...")
         # Collect the outputs and determine what to delete
         ret = []
         for source in outputs:
             dataset = data[source]
             if isinstance(dataset, Dataset):
-                cd = [source]
+                cd = [dataset]
             elif isinstance(dataset, Chunker):
                 cd = list(dataset.chunks())
             else:
@@ -173,12 +171,13 @@ class RunnerBase(object):
                 to_delete.remove(source)
 
         ret = self.format_outputs(ret)
-
         # Cleanup
         for sd in to_delete:
             for ds in data[sd].values():
                 for d in ds:
                     d.delete()
+
+        logging.info("Finished...")
 
         return ret
 
@@ -418,8 +417,6 @@ class MTRunner(RunnerBase):
             if len(output) == 1:
                 output = output[0]
 
-            elif was_mapped:
-                output = CatDataset(output)
             else:
                 output = MergeDataset(output)
 

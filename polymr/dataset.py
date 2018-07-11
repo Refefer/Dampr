@@ -3,6 +3,7 @@ import os
 import sys
 import itertools
 import heapq
+from operator import itemgetter
 
 PY_MAJOR = sys.version_info.major
 
@@ -20,54 +21,6 @@ except ImportError:
     def dump_pickle(o, f):
         pickle.dump(o, f,  pickle.HIGHEST_PROTOCOL)
 
-class Dataset(object):
-
-    def read(self):
-        raise NotImplementedError()
-
-    def grouped_read(self):
-        for key, group in itertools.groupby(self.read(), key=lambda x: x[0]):
-            it = (kv[1] for kv in group)
-            yield key, it
-
-    def delete(self):
-        raise NotImplementedError()
-
-    def __iter__(self):
-        return self.read()
-
-class EmptyDataset(Dataset):
-
-    def read(self):
-        return iter([])
-
-    def delete(self):
-        pass
-
-class TextLineDataset(Dataset):
-    def __init__(self, path, start=0, end=None):
-        self.path = path
-        self.start = start
-        self.end = end
-
-    def read(self):
-        with open(self.path) as f:
-            f.seek(self.start)
-            cur_pos = self.start
-            if self.start > 0:
-                cur_pos += len(f.readline())
-
-            for i, line in enumerate(f):
-                yield self.start + i, line
-                cur_pos += len(line)
-                if self.end is not None and cur_pos > self.end:
-                    break
-
-    def __str__(self):
-        return "Text[path={},start={},end={}]".format(self.path,self.start, self.end)
-
-    def delete(self):
-        pass
 
 class DatasetWriter(object):
     def __init__(self, worker_fs):
@@ -82,34 +35,9 @@ class DatasetWriter(object):
     def finished(self):
         raise NotImplementedError()
 
-class PickledDataset(Dataset):
-    def __init__(self, path, header_field=True):
-        self.path = path
-        self.header_field = header_field
 
-    def read(self):
-        with gzip.GzipFile(self.path, 'rb', 1) as f:
-            if self.header_field:
-                n_records = pickle.load(f)
-                for _ in range(n_records):
-                    yield pickle.load(f)
-            else:
-                try:
-                    while True:
-                        yield pickle.load(f)
-                except EOFError:
-                    pass
-
-    def delete(self):
-        os.unlink(self.path)
-
-    def __str__(self):
-        return 'PickledDataset[path={}]'.format(self.path)
-    __repr__ = __str__
-
-
-class BufferedWriter(object):
-    def __init__(self, f, max_size=4096):
+class BufferedWriter(DatasetWriter):
+    def __init__(self, f, max_size=1024**2):
         self.f = f
         self.max_size = max_size
         self.buffer = []
@@ -134,7 +62,7 @@ class BufferedWriter(object):
         self.f.close()
  
 class BufferedSortedWriter(DatasetWriter):
-    def __init__(self, fs, buffer_size=10*1024**2, always_to_disk=True):
+    def __init__(self, fs, buffer_size=1*1024**2, always_to_disk=True):
         self.fs = fs
         self.buffer_size = buffer_size
         self.always_to_disk = always_to_disk
@@ -161,10 +89,10 @@ class BufferedSortedWriter(DatasetWriter):
             bw.flush()
 
     def _sort_kvs(self):
-        self.keyoffs.sort(key=lambda x: x[0])
+        self.keyoffs.sort(key=itemgetter(0))
+        v = self.buffer.getvalue()
         for _, start, stop in self.keyoffs:
-            self.buffer.seek(start)
-            yield self.buffer.read(stop - start)
+            yield v[start:stop]
 
     def flush_to_disk(self):
         file_name = self.write_batch_to_disk()
@@ -221,19 +149,6 @@ class CSDatasetWriter(DatasetWriter):
 
     def finished(self):
         return {i: p.finished()[0] for i, p in enumerate(self.partitions)}
-
-class MemGZipDataset(Dataset):
-    def __init__(self, sio):
-        self.sio = sio
-
-    def read(self):
-        with gzip.GzipFile(fileobj=StringIO(self.sio)) as sio:
-            n_records = pickle.load(sio)
-            for _ in range(n_records):
-                yield pickle.load(sio)
-
-    def delete(self):
-        pass
 
 class ContiguousWriter(DatasetWriter):
     def __init__(self, worker_fs):
@@ -314,8 +229,101 @@ class UnorderedWriter(DatasetWriter):
                 self.flush_to_memory()
 
         return {0: self.files}
+
+class Chunker(object):
+    def chunks(self):
+        raise NotImplementedError()
+
+class Dataset(object):
+
+    def read(self):
+        raise NotImplementedError()
+
+    def grouped_read(self):
+        for key, group in itertools.groupby(self.read(), key=lambda x: x[0]):
+            it = (kv[1] for kv in group)
+            yield key, it
+
+    def delete(self):
+        raise NotImplementedError()
+
+    def __iter__(self):
+        return self.read()
+
+class EmptyDataset(Dataset):
+
+    def read(self):
+        return iter([])
+
+    def delete(self):
+        pass
+
+class TextLineDataset(Dataset):
+    def __init__(self, path, start=0, end=None):
+        self.path = path
+        self.start = start
+        self.end = end
+
+    def read(self):
+        with open(self.path) as f:
+            f.seek(self.start)
+            cur_pos = self.start
+            if self.start > 0:
+                cur_pos += len(f.readline())
+
+            for i, line in enumerate(f):
+                yield self.start + i, line
+                cur_pos += len(line)
+                if self.end is not None and cur_pos > self.end:
+                    break
+
+    def __str__(self):
+        return "Text[path={},start={},end={}]".format(self.path,self.start, self.end)
+
+    def delete(self):
+        pass
+
+class PickledDataset(Dataset):
+    def __init__(self, path, header_field=True):
+        self.path = path
+        self.header_field = header_field
+
+    def read(self):
+        with gzip.GzipFile(self.path, 'rb', 1) as f:
+            if self.header_field:
+                n_records = pickle.load(f)
+                for _ in range(n_records):
+                    yield pickle.load(f)
+            else:
+                try:
+                    while True:
+                        yield pickle.load(f)
+                except EOFError:
+                    pass
+
+    def delete(self):
+        os.unlink(self.path)
+
+    def __str__(self):
+        return 'PickledDataset[path={}]'.format(self.path)
+    __repr__ = __str__
+
+
+class MemGZipDataset(Dataset):
+    def __init__(self, sio):
+        self.sio = sio
+
+    def read(self):
+        with gzip.GzipFile(fileobj=StringIO(self.sio)) as sio:
+            n_records = pickle.load(sio)
+            for _ in range(n_records):
+                yield pickle.load(sio)
+
+    def delete(self):
+        pass
+
     
-class CatDataset(Dataset):
+class CatDataset(Dataset, Chunker):
     def __init__(self, datasets):
         self.datasets = datasets
 
@@ -328,7 +336,11 @@ class CatDataset(Dataset):
         for d in self.datasets:
             d.delete()
 
-class MergeDataset(Dataset):
+    def chunks(self):
+        for d in self.datasets:
+            yield d
+
+class MergeDataset(Dataset, Chunker):
     def __init__(self, datasets):
         self.datasets = datasets
 
@@ -342,13 +354,19 @@ class MergeDataset(Dataset):
 
         return heapq.merge(*its)
 
+    def chunks(self):
+        for d in self.datasets:
+            yield d
+
+
     def delete(self):
         for d in self.datasets:
             d.delete()
 
-class MemoryDataset(Dataset):
-    def __init__(self, kvs):
+class MemoryDataset(Dataset, Chunker):
+    def __init__(self, kvs, partitions=13):
         self.kvs = kvs
+        self.partitions = partitions
 
     def read(self):
         for k, v in self.kvs:
@@ -356,6 +374,13 @@ class MemoryDataset(Dataset):
 
     def delete(self):
         pass
+
+    def chunks(self):
+        chunk_size = len(self.kvs) / self.partitions
+        start = 0
+        while start < len(self.vs):
+            yield MemoryDataset(self.kvs[start:start+chunk_size])
+            start += chunk_size
 
 class StreamDataset(Dataset):
     def __init__(self, it):
@@ -367,4 +392,34 @@ class StreamDataset(Dataset):
     def delete(self):
         pass
 
+class TextInput(Chunker):
+    def __init__(self, path, chunk_size=64*1024**2):
+        self.path = path
+        self.chunk_size = chunk_size
+
+    def chunks(self):
+        file_size = os.stat(self.path).st_size
+        offset = 0
+        while offset < file_size:
+            yield TextLineDataset(self.path, offset, offset + self.chunk_size)
+            offset += self.chunk_size
+
+class MemoryInput(Chunker):
+    def __init__(self, items, partitions=50):
+        self.items = items
+        self.partitions = min(len(items), partitions)
+
+    def chunks(self):
+        chunk_size = int(len(self.items) // float(self.partitions))
+        for start in range(0, len(self.items), chunk_size):
+            yield MemoryDataset(self.items[start:start+chunk_size])
+
+class DMChunker(Chunker):
+    def __init__(self, data_mapping):
+        self.dm = data_mapping
+
+    def chunks(self):
+        for vs in self.dm.values():
+            for v in vs:
+                yield v
 

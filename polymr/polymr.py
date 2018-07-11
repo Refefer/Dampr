@@ -1,3 +1,4 @@
+import itertools
 import sys
 import time
 import logging
@@ -6,7 +7,7 @@ import random
 
 from .base import *
 from .runner import MTRunner, Graph, Source
-from .inputs import MemoryInput, TextInput
+from .dataset import MemoryInput, TextInput, Chunker
 
 class ValueEmitter(object):
     def __init__(self, datasets):
@@ -16,8 +17,11 @@ class ValueEmitter(object):
         for _, v in self.datasets[0].read():
             yield v
 
-    def read(self):
-        return [v for k,v in self.datasets[0].read()]
+    def read(self, k=None):
+        if k is None:
+            return list(self.stream())
+
+        return list(itertools.islice(self.stream(), k))
 
     def __iter__(self):
         return self.stream()
@@ -34,9 +38,13 @@ class PBase(object):
     def run(self, name=None, **kwargs):
         if name is None:
             name = 'polymr/{}'.format(random.random())
+
         logging.debug("run source: %s", self.source)
         ds = self.pmer.runner(name, self.pmer.graph, **kwargs).run([self.source])
         return ValueEmitter(ds)
+
+    def read(self, k=None, **kwargs):
+        return self.run(**kwargs).read(k)
 
 def _identity(k, v):
     yield k, v
@@ -47,11 +55,11 @@ class PMap(PBase):
         super(PMap, self).__init__(source, pmer)
         self.agg = [] if agg is None else agg
 
-    def run(self, name=None):
+    def run(self, **kwargs):
         if len(self.agg) > 0:
-            return self.checkpoint().run(name)
+            return self.checkpoint().run(**kwargs)
         else:
-            return super(PMap, self).run(name)
+            return super(PMap, self).run(**kwargs)
 
     def _add_map(self, f):
         return PMap(self.source, self.pmer, self.agg + [Map(f)])
@@ -143,12 +151,10 @@ class PMap(PBase):
 
         return ins
 
-    def cached(self, partitions=50):
+    def cached(self):
         # Run the pipeline, load it into memory, and create a new graph
         results = self.checkpoint().run()
-        p = Polymr().memory(list(results.read()), partitions)
-        results.delete()
-        return p
+        return Polymr.from_dataset(results.datasets[0])
 
 class ARReduce(object):
     def __init__(self, pmap):
@@ -245,6 +251,12 @@ class Polymr(object):
     def json(cls, fname):
         return cls.text(fname).map(json.loads)
 
+    @classmethod
+    def from_dataset(cls, dataset):
+        assert isinstance(dataset, Chunker)
+        source, ng = Graph().add_input(dataset)
+        return PMap(source, Polymr(ng))
+
     def _add_mapper(self, *args, **kwargs): 
         output, ng = self.graph.add_mapper(*args, **kwargs)
         return output, Polymr(ng)
@@ -252,7 +264,6 @@ class Polymr(object):
     def _add_reducer(self, *args, **kwargs): 
         output, ng = self.graph.add_reducer(*args, **kwargs)
         return output, Polymr(ng)
-
 
 def combine(aggs):
     if len(aggs) == 1:
