@@ -113,5 +113,13 @@ class PolymrTest(unittest.TestCase):
         output = list(output)
         self.assertEquals(list(range(13,20)), output)
 
+    def test_combine(self):
+        even = self.items.filter(lambda x: x % 2 == 0)
+        odd  = self.items.filter(lambda x: x % 2 == 1)
+
+        even_ve, odd_ve = Polymr.run(even, odd)
+        self.assertEquals([10,12,14,16,18], list(even_ve))
+        self.assertEquals([11,13,15,17,19], list(odd_ve))
+
 if __name__ == '__main__':
     unittest.main()

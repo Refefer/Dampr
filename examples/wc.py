@@ -1,21 +1,20 @@
 import json
 import sys
+import logging
 
 from polymr import Polymr
 
 def main(fname):
-    import logging
     logging.basicConfig(level=logging.INFO,
             format='%(asctime)s %(levelname)s %(message)s')
 
-    polymr = Polymr()
-    wc = polymr.text(fname) \
+    wc = Polymr.text(fname) \
             .map(lambda v: len(v.split())) \
             .a_group_by(lambda x: 1) \
-            .sum()
+                .sum()
 
     results = wc.run("word-count")
-    for k, v in results.read():
+    for k, v in results:
         print("Word Count:", v)
 
     results.delete()

@@ -14,7 +14,7 @@ class ValueEmitter(object):
         self.datasets = datasets
 
     def stream(self):
-        for _, v in self.datasets[0].read():
+        for _, v in self.datasets.read():
             yield v
 
     def read(self, k=None):
@@ -27,7 +27,7 @@ class ValueEmitter(object):
         return self.stream()
 
     def delete(self):
-        self.datasets[0].delete()
+        self.datasets.delete()
 
 class PBase(object):
     def __init__(self, source, pmer):
@@ -41,7 +41,7 @@ class PBase(object):
 
         logging.debug("run source: %s", self.source)
         ds = self.pmer.runner(name, self.pmer.graph, **kwargs).run([self.source])
-        return ValueEmitter(ds)
+        return ValueEmitter(ds[0])
 
     def read(self, k=None, **kwargs):
         return self.run(**kwargs).read(k)
@@ -55,11 +55,11 @@ class PMap(PBase):
         super(PMap, self).__init__(source, pmer)
         self.agg = [] if agg is None else agg
 
-    def run(self, **kwargs):
+    def run(self, name=None, **kwargs):
         if len(self.agg) > 0:
-            return self.checkpoint().run(**kwargs)
+            return self.checkpoint().run(name, **kwargs)
         else:
-            return super(PMap, self).run(**kwargs)
+            return super(PMap, self).run(name, **kwargs)
 
     def _add_map(self, f):
         return PMap(self.source, self.pmer, self.agg + [Map(f)])
@@ -123,8 +123,7 @@ class PMap(PBase):
         def _sort_by(_key, value):
             yield key(value), value
 
-        pm = self._add_map(_sort_by).checkpoint()
-        return PReduce(pm.source, pm.pmer)
+        return self._add_map(_sort_by).checkpoint()
 
     def join(self, other):
         assert isinstance(other, PBase)
@@ -206,8 +205,8 @@ class PJoin(PBase):
         super(PJoin, self).__init__(source, pmer)
         self.right = right
 
-    def run(self):
-        return self.reduce(lambda l, r: (list(l), list(r))).run()
+    def run(self, name=None, **kwargs):
+        return self.reduce(lambda l, r: (list(l), list(r))).run(name, **kwargs)
 
     def reduce(self, aggregate):
         def _reduce(k, left, right):
@@ -243,8 +242,8 @@ class Polymr(object):
         return PMap(source, Polymr(ng))
 
     @classmethod
-    def text(cls, fname):
-        source, ng = Graph().add_input(TextInput(fname))
+    def text(cls, fname, chunk_size=1024**2):
+        source, ng = Graph().add_input(TextInput(fname, chunk_size))
         return PMap(source, Polymr(ng))
 
     @classmethod
@@ -256,6 +255,27 @@ class Polymr(object):
         assert isinstance(dataset, Chunker)
         source, ng = Graph().add_input(dataset)
         return PMap(source, Polymr(ng))
+
+    @classmethod
+    def run(self, *pmers, **kwargs):
+        sources = []
+        graph = None
+        for i, pmer in enumerate(pmers):
+            if isinstance(pmer, PMap):
+                pmer = pmer.checkpoint()
+            elif isinstance(pmer, PJoin):
+                pmer = pmer.reduce(lambda l, r: (list(l), list(r)))
+            
+            if i == 0:
+                graph = pmer.pmer.graph
+            else:
+                graph = pmer.pmer.graph.union(graph)
+
+            sources.append(pmer.source)
+
+        name = kwargs.pop('name', 'polymr/{}'.format(random.random()))
+        ds = pmer.pmer.runner(name, graph, **kwargs).run(sources)
+        return [ValueEmitter(d) for d in ds]
 
     def _add_mapper(self, *args, **kwargs): 
         output, ng = self.graph.add_mapper(*args, **kwargs)

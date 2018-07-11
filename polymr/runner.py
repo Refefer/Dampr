@@ -136,12 +136,12 @@ class RunnerBase(object):
         for stage_id, stage in enumerate(self.graph.stages):
         #for stage_id, (source, inputs, func) in enumerate(self.graph.stages):
             logging.info("Starting stage %s/%s", stage_id, len(self.graph.stages))
-            logging.info("Function - %s", type(stage))
+            logging.debug("Function - %s", type(stage))
             input_data = [data[i] for i in stage.inputs]
             for i, id in enumerate(input_data):
-                logging.info("Input: %s", stage.inputs[i])
+                logging.debug("Input: %s", stage.inputs[i])
 
-            logging.info("Output: %s", stage.output)
+            logging.debug("Output: %s", stage.output)
 
             if isinstance(stage, GMap):
                 data_mapping = self.run_map(stage_id, input_data, stage)

@@ -19,7 +19,7 @@ def main(fname):
             .sum()
 
     results = wc.run("word-count")
-    for k, v in results.read():
+    for k, v in results:
         print("Word Count:", v)
 
     results.delete()
