@@ -16,7 +16,7 @@ try:
 
 except ImportError:
     import pickle
-    from io import StringIO
+    from io import BytesIO as StringIO
 
     def dump_pickle(o, f):
         pickle.dump(o, f,  pickle.HIGHEST_PROTOCOL)
@@ -52,7 +52,9 @@ class BufferedWriter(DatasetWriter):
             self.flush()
 
     def flush(self):
-        self.f.write(''.join(self.buffer))
+        for p in self.buffer:
+            self.f.write(p)
+
         self.f.flush()
         del self.buffer[:]
         self.size = 0
