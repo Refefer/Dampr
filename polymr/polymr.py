@@ -242,13 +242,13 @@ class Polymr(object):
         return PMap(source, Polymr(ng))
 
     @classmethod
-    def text(cls, fname, chunk_size=1024**2):
+    def text(cls, fname, chunk_size=16*1024**2):
         source, ng = Graph().add_input(TextInput(fname, chunk_size))
         return PMap(source, Polymr(ng))
 
     @classmethod
-    def json(cls, fname):
-        return cls.text(fname).map(json.loads)
+    def json(cls, *args, **kwargs):
+        return cls.text(*args, **kwargs).map(json.loads)
 
     @classmethod
     def from_dataset(cls, dataset):

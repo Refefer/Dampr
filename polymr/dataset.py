@@ -52,9 +52,7 @@ class BufferedWriter(DatasetWriter):
             self.flush()
 
     def flush(self):
-        for p in self.buffer:
-            self.f.write(p)
-
+        self.f.write(b''.join(self.buffer))
         self.f.flush()
         del self.buffer[:]
         self.size = 0
@@ -63,6 +61,36 @@ class BufferedWriter(DatasetWriter):
         self.flush()
         self.f.close()
  
+class ReducedWriter(DatasetWriter):
+    def __init__(self, dw, reducer, max_values=1000):
+        self.dw = dw
+        self.reducer = reducer
+        self.max_values = max_values
+        self.key_set = {}
+
+    def start(self):
+        self.dw.start()
+        self.key_set.clear()
+
+    def add_record(self, key, value):
+        if key in self.key_set:
+            self.key_set[key] = self.reducer.reducer(key, [value, self.key_set[key]])
+        else:
+            self.key_set[key] = value
+
+        if len(self.key_set) > self.max_values:
+            self.flush()
+
+    def flush(self):
+        for k, v in self.key_set.items():
+            self.dw.add_record(k, v)
+
+        self.key_set.clear()
+
+    def finished(self):
+        self.flush()
+        return self.dw.finished()
+
 class BufferedSortedWriter(DatasetWriter):
     def __init__(self, fs, buffer_size=1*1024**2, always_to_disk=True):
         self.fs = fs
