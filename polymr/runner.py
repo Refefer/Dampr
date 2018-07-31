@@ -202,8 +202,8 @@ def mrcs_map(job, out_q, stage, combiner, shuffler, fs):
     """
     w_id = os.getpid()
     dw = BufferedSortedWriter(fs, always_to_disk=False)
-    #if isinstance(combiner, PartialReduceCombiner):
-    #    dw = ReducedWriter(dw, combiner.reducer)
+    if isinstance(combiner, PartialReduceCombiner):
+        dw = ReducedWriter(dw, combiner.reducer)
 
     dw.start()
     m_id, main, supplemental = job

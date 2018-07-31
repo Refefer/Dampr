@@ -129,6 +129,7 @@ class BufferedSortedWriter(DatasetWriter):
         dataset = PickledDataset(file_name)
         self.files.append(dataset)
         self.buffer.truncate(0)
+        self.buffer.seek(0)
         self.keyoffs = []
 
     def flush_to_memory(self):
