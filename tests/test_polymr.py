@@ -92,7 +92,7 @@ class PolymrTest(unittest.TestCase):
     def test_associative_reduce(self):
         output = self.items \
                 .a_group_by(lambda x: x % 2) \
-                    .reduce(lambda k, vs: sum(vs)) \
+                    .reduce(lambda x,y: x + y) \
                 .run()
 
         output = list(output)

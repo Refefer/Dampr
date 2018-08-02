@@ -30,18 +30,20 @@ class Source(object):
     __repr__ = __str__
 
 class GMap(object):
-    def __init__(self, output, inputs, mapper, combiner, shuffler):
+    def __init__(self, output, inputs, mapper, combiner, shuffler, options=None):
         self.output = output
         self.inputs = inputs
         self.mapper = mapper
         self.combiner = combiner
         self.shuffler = shuffler
+        self.options = options if options is not None else  {}
 
 class GReduce(object):
-    def __init__(self, output, inputs, reducer):
+    def __init__(self, output, inputs, reducer, options):
         self.output = output
         self.inputs = inputs
         self.reducer = reducer
+        self.options = options if options is not None else  {}
 
 class Graph(object):
     def __init__(self):
@@ -60,7 +62,8 @@ class Graph(object):
         ng.inputs[inp] = dataset
         return inp, ng
 
-    def add_mapper(self, inputs, mapper, combiner=None, shuffler=None, name=None):
+    def add_mapper(self, inputs, mapper, combiner=None, 
+            shuffler=None, name=None, options=None):
         assert isinstance(mapper, Mapper)
         assert isinstance(combiner, (type(None), Combiner))
         assert isinstance(shuffler, (type(None), Shuffler))
@@ -70,10 +73,10 @@ class Graph(object):
 
         inp = Source(name.format(len(self.stages)))
         ng = self._copy_graph()
-        ng.stages.append(GMap(inp, inputs, mapper, combiner, shuffler))
+        ng.stages.append(GMap(inp, inputs, mapper, combiner, shuffler, options))
         return inp, ng
 
-    def add_reducer(self, inputs, reducer, name=None):
+    def add_reducer(self, inputs, reducer, name=None, options=None):
         assert isinstance(reducer, Reducer)
         assert all(isinstance(inp, Source) for inp in inputs)
         if name is None:
@@ -81,7 +84,7 @@ class Graph(object):
 
         inp = Source(name.format(len(self.stages)))
         ng = self._copy_graph()
-        ng.stages.append(GReduce(inp, inputs, reducer))
+        ng.stages.append(GReduce(inp, inputs, reducer, options))
         return inp, ng
 
     def union(self, other_graph):
@@ -197,14 +200,18 @@ def mr_map(job, out_q, stage, fs, n_partitions):
     out_q.put((w_id, m_id, dw.finished()))
     logging.debug("Mapper: %i: Finished", w_id)
 
-def mrcs_map(job, out_q, stage, combiner, shuffler, fs):
+def mrcs_map(job, out_q, stage, combiner, shuffler, fs, options):
     """
     Runs a more fine grained map/combine/shuffler
     """
     w_id = os.getpid()
     dw = BufferedSortedWriter(fs, always_to_disk=False)
-    if isinstance(combiner, PartialReduceCombiner):
-        dw = ReducedWriter(dw, combiner.reducer)
+
+    # Do we have a map side partial reducer?
+    binop = options.get('binop')
+    if callable(binop):
+        reduce_buffer = options.get('reduce_buffer', 1000)
+        dw = ReducedWriter(dw, binop, max_values=reduce_buffer)
 
     dw.start()
     m_id, main, supplemental = job
@@ -292,8 +299,9 @@ class MapStageRunner(StageRunner):
         else:
             c = NoopCombiner() if self.mapper.combiner is None else self.mapper.combiner
             s = DefaultShuffler(self.n_partitions, Splitter())
+            o = self.mapper.options
             p = multiprocessing.Process(target=mrcs_map,
-                args=(payload, output_q, self.mapper, c, s, fs))
+                args=(payload, output_q, self.mapper, c, s, fs, o))
 
         return p
 

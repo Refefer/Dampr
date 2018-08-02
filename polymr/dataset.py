@@ -62,9 +62,10 @@ class BufferedWriter(DatasetWriter):
         self.f.close()
  
 class ReducedWriter(DatasetWriter):
-    def __init__(self, dw, reducer, max_values=1000):
+    SENTINEL = object()
+    def __init__(self, dw, binop, max_values=1000):
         self.dw = dw
-        self.reducer = reducer
+        self.binop = binop
         self.max_values = max_values
         self.key_set = {}
 
@@ -73,13 +74,14 @@ class ReducedWriter(DatasetWriter):
         self.key_set.clear()
 
     def add_record(self, key, value):
-        if key in self.key_set:
-            self.key_set[key] = self.reducer.reducer(key, [value, self.key_set[key]])
+        cached_value = self.key_set.get(key, self.SENTINEL)
+        if cached_value is not self.SENTINEL:
+            self.key_set[key] = self.binop(value, cached_value)
         else:
             self.key_set[key] = value
 
-        if len(self.key_set) > self.max_values:
-            self.flush()
+            if len(self.key_set) > self.max_values:
+                self.flush()
 
     def flush(self):
         for k, v in self.key_set.items():

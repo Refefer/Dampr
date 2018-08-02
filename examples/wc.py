@@ -9,13 +9,13 @@ def main(fname):
             format='%(asctime)s %(levelname)s %(message)s')
 
     wc = Polymr.text(fname) \
-            .map(lambda v: len(v.split())) \
-            .a_group_by(lambda x: 1) \
-                .sum()
+            .flat_map(lambda v: v.split()) \
+            .fold_by(lambda x: x, value=lambda x: 1, binop=lambda x, y: x + y) \
+            .sort_by(lambda x: -x[1])
 
     results = wc.run("word-count")
     for k, v in results:
-        print("Word Count:", v)
+        print("{}:".format(k), v)
 
     results.delete()
 

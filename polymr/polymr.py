@@ -71,7 +71,7 @@ class PMap(PBase):
 
         return self._add_map(_sample)
         
-    def checkpoint(self, force=False, combiner=None):
+    def checkpoint(self, force=False, combiner=None, options=None):
         if len(self.agg) > 0 or force:
             aggs = [Map(_identity)] if len(self.agg) == 0 else self.agg[:]
             name = ' -> ' .join('{}'.format(a.mapper.__name__) for a in aggs)
@@ -79,7 +79,8 @@ class PMap(PBase):
             source, pmer = self.pmer._add_mapper([self.source], 
                     Map(combine(aggs)), 
                     combiner=combiner,
-                    name=name)
+                    name=name,
+                    options=options)
             return PMap(source, pmer) 
 
         return self
@@ -119,16 +120,8 @@ class PMap(PBase):
         pm = self._add_map(_a_group_by)
         return ARReduce(pm)
 
-    def fold_by(self, key, binop, value=lambda x: x):
-        def _fold_by(key, vs):
-            vs = iter(vs)
-            acc = next(vs)
-            for v in vs:
-                acc = binop(acc, v)
-
-            return acc
-
-        return self.a_group_by(key, value).reduce(_fold_by)
+    def fold_by(self, key, binop, value=lambda x: x, **options):
+        return self.a_group_by(key, value).reduce(binop, **options)
 
     def sort_by(self, key):
         def _sort_by(_key, value):
@@ -147,7 +140,7 @@ class PMap(PBase):
 
     def count(self, key=lambda x: x):
         return self.a_group_by(key, lambda v: 1) \
-                .reduce(lambda k, vs: sum(vs))
+                .reduce(lambda x,y: x + y)
 
     def inspect(self, prefix="", run_exit=False):
         def _inspect(k, v):
@@ -170,17 +163,27 @@ class ARReduce(object):
     def __init__(self, pmap):
         self.pmap = pmap
 
-    def reduce(self, agg):
-        red = Reduce(agg)
-        # We add the associative aggregator to the combiner during map
-        pm = self.pmap.checkpoint(True, combiner=PartialReduceCombiner(red))
-        return PReduce(pm.source, pm.pmer).reduce(agg)
-    
-    def first(self):
-        return self.reduce(lambda k, vs: next(vs))
+    def reduce(self, binop, reduce_buffer=1000):
+        def _reduce(key, vs):
+            acc = next(vs)
+            for v in vs:
+                acc = binop(acc, v)
 
-    def sum(self):
-        return self.reduce(lambda k, vs: sum(vs))
+            return acc
+
+        red = Reduce(_reduce)
+        options = {"binop": binop, "reduce_buffer": reduce_buffer}
+        # We add the associative aggregator to the combiner during map
+        pm = self.pmap.checkpoint(True, 
+                combiner=PartialReduceCombiner(red), 
+                options=options)
+        return PReduce(pm.source, pm.pmer).reduce(_reduce)
+    
+    def first(self, **options):
+        return self.reduce(lambda x, _y: x, **options)
+
+    def sum(self, **options):
+        return self.reduce(lambda x, y: x + y, **options)
 
 class PReduce(PBase):
 
