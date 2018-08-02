@@ -225,8 +225,10 @@ def mrcs_map(job, out_q, stage, combiner, shuffler, fs, options):
         logging.debug("Combining outputs: found %i files", len(sources))
         logging.debug("Combining: %s", sources)
         combined_stream = combiner.combine(sources)
-    else:
+    elif len(sources) == 1:
         combined_stream = sources[0]
+    else:
+        combined_stream = EmptyDataset()
 
     results = shuffler.shuffle(fs, [combined_stream])
 

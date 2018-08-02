@@ -130,6 +130,18 @@ class PolymrTest(unittest.TestCase):
         results = list(output.run())
         self.assertEquals([(1, 5)], results)
 
+    def test_empty_map(self):
+        """
+        Test that empty mrcs writes don't blow up
+        """
+        output = self.items \
+                .sample(0.0) \
+                .fold_by(lambda x: 1, 
+                        value=lambda x: x % 2, 
+                        binop=lambda x, y: x + y)
+
+        results = list(output.run())
+        self.assertEquals([], results)
 
 if __name__ == '__main__':
     unittest.main()
