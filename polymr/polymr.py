@@ -119,6 +119,17 @@ class PMap(PBase):
         pm = self._add_map(_a_group_by)
         return ARReduce(pm)
 
+    def fold_by(self, key, binop, value=lambda x: x):
+        def _fold_by(key, vs):
+            vs = iter(vs)
+            acc = next(vs)
+            for v in vs:
+                acc = binop(acc, v)
+
+            return acc
+
+        return self.a_group_by(key, value).reduce(_fold_by)
+
     def sort_by(self, key):
         def _sort_by(_key, value):
             yield key(value), value

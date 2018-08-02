@@ -121,5 +121,15 @@ class PolymrTest(unittest.TestCase):
         self.assertEquals([10,12,14,16,18], list(even_ve))
         self.assertEquals([11,13,15,17,19], list(odd_ve))
 
+    def test_fold_by(self):
+        output = self.items \
+                .fold_by(lambda x: 1, 
+                        value=lambda x: x % 2, 
+                        binop=lambda x, y: x + y)
+
+        results = list(output.run())
+        self.assertEquals([(1, 5)], results)
+
+
 if __name__ == '__main__':
     unittest.main()

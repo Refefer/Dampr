@@ -129,7 +129,7 @@ class RunnerBase(object):
 
         return new_data
 
-    def run(self, outputs):
+    def run(self, outputs, cleanup=True):
         data = self.graph.inputs.copy()
         to_delete = set()
         splitter = Splitter()
@@ -172,10 +172,11 @@ class RunnerBase(object):
 
         ret = self.format_outputs(ret)
         # Cleanup
-        for sd in to_delete:
-            for ds in data[sd].values():
-                for d in ds:
-                    d.delete()
+        if cleanup:
+            for sd in to_delete:
+                for ds in data[sd].values():
+                    for d in ds:
+                        d.delete()
 
         logging.info("Finished...")
 
