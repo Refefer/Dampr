@@ -159,5 +159,18 @@ class PolymrTest(unittest.TestCase):
 
         shutil.rmtree(path)
 
+    def test_cached(self):
+        """
+        Tests caching stages works
+        """
+        sink = self.items.map(lambda x: str(x)) \
+                .cached()
+
+        res = sink.run()
+        output = sink.count()
+
+        results = list(output.run())
+        self.assertEquals([(str(i), 1) for i in range(10, 20)], results)
+
 if __name__ == '__main__':
     unittest.main()

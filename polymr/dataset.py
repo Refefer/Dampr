@@ -117,7 +117,6 @@ class BufferedSortedWriter(DatasetWriter):
 
     def _write_to_gzip(self, f):
         with gzip.GzipFile(fileobj=f, mode='wb', compresslevel=1) as f:
-            dump_pickle(len(self.keyoffs), f)
             bw = BufferedWriter(f)
             for kv in self._sort_kvs():
                 bw.write(kv)
@@ -189,6 +188,10 @@ class BufferedSortedDiskWriter(BufferedSortedWriter):
         return PickledDataset(file_name)
 
 class CSDatasetWriter(DatasetWriter):
+    """
+    Writes out a stream of key values, splitting into separate partitions based on
+    the provided Splitter.
+    """
     def __init__(self, worker_fs, splitter, n_partitions, 
             buffer_size=10*1024*1024, writer_cls=BufferedSortedDiskWriter):
         super(CSDatasetWriter, self).__init__(worker_fs)
@@ -214,6 +217,9 @@ class CSDatasetWriter(DatasetWriter):
         return {i: p.finished()[0] for i, p in enumerate(self.partitions)}
 
 class SinkWriter(DatasetWriter):
+    """
+    Writes out the value portion of the key/value pair in text format.
+    """
     def __init__(self, path, idx):
         super(SinkWriter, self).__init__(None)
         self.path = path
@@ -231,13 +237,21 @@ class SinkWriter(DatasetWriter):
         return {0: [TextLineDataset(self.fname)]}
 
 class ContiguousWriter(DatasetWriter):
+    """
+    Writes out data unordered into a Gzipped file
+    """
     def __init__(self, worker_fs):
         super(ContiguousWriter, self).__init__(worker_fs)
         self.worker_fs = worker_fs
     
+    def get_fileobj(self):
+        raise NotImplementedError()
+
+    def get_dataset(self):
+        raise NotImplementedError()
+    
     def start(self):
-        self.fname = self.worker_fs.get_file()
-        self.f = BufferedWriter(gzip.GzipFile(self.fname, 'wb', 1))
+        self.f = BufferedWriter(self.get_fileobj())
     
     def add_record(self, key, value):
         dump_pickle((key, value), self.f)
@@ -245,13 +259,37 @@ class ContiguousWriter(DatasetWriter):
     def finished(self):
         if self.f.empty:
             self.f.close()
-            os.unlink(self.fname)
             return {0: []}
 
         self.f.close()
-        return {0: [PickledDataset(self.fname, False)]}
+        return {0: [self.get_dataset()]}
+
+class ContiguousDiskWriter(ContiguousWriter):
+    """
+    Writes out data unordered into a Gzipped file
+    """
+    def get_fileobj(self):
+        self.fname = self.worker_fs.get_file()
+        return gzip.GzipFile(self.fname, 'wb', 1)
+
+    def get_dataset(self):
+        return PickledDataset(self.fname)
+    
+class ContiguousMemoryWriter(ContiguousWriter):
+    """
+    Writes out data unordered into a Gzipped file
+    """
+    def get_fileobj(self):
+        self.buffer = StringIO()
+        return gzip.GzipFile(fileobj=self.buffer, mode='wb', compresslevel=1)
+
+    def get_dataset(self):
+        return MemGZipDataset(self.buffer.getvalue())
 
 class UnorderedWriter(DatasetWriter):
+    """
+    Writes unordered chunks to disk
+    """
     def __init__(self, worker_fs, chunk_size=64*1024*1024, always_to_disk=False):
         super(UnorderedWriter, self).__init__(worker_fs)
         self.chunk_size = chunk_size
@@ -262,8 +300,6 @@ class UnorderedWriter(DatasetWriter):
     def _write_to_gzip(self, fobj):
         buf = self.buffer
         with gzip.GzipFile(fileobj=fobj, mode='wb', compresslevel=1) as f:
-            dump_pickle(self.records, f)
-
             buf.seek(0)
             data = buf.read(4096 * 4)
             while data:
@@ -271,44 +307,60 @@ class UnorderedWriter(DatasetWriter):
                 data = buf.read(4096 * 4)
 
     def flush(self):
-        buf = self.buffer
+        raise NotImplementedError()
+
+    def reset(self):
+        self.buffer = StringIO()
+
+    def start(self):
+        self.reset()
+
+    def add_record(self, key, value):
+        dump_pickle((key, value), self.buffer)
+
+        if self.buffer.tell() > self.chunk_size:
+            self._flush_buffer()
+
+    def _flush_buffer(self):
+        dataset = self.flush()
+        self.files.append(dataset)
+        self.reset()
+
+    def finished(self):
+        if self.buffer.tell() > 0:
+            self._flush_buffer()
+
+        return {0: self.files}
+
+class UnorderedDiskWriter(UnorderedWriter):
+    """
+    Writes unordered chunks to disk
+    """
+    def flush(self):
         chunk_name = self.worker_fs.get_file(str(self.chunk_id))
         self.chunk_id += 1
         with open(chunk_name, 'wb') as out:
             self._write_to_gzip(out)
         
-        self.files.append(PickledDataset(chunk_name, True))
-        self._new_buffer()
+        return PickledDataset(chunk_name)
 
-    def _new_buffer(self):
-        self.records = 0
-        self.buffer = StringIO()
+class UnorderedMemoryWriter(UnorderedWriter):
+    """
+    Writes unordered chunks to memory
+    """
+    def flush(self):
+        chunk_name = self.worker_fs.get_file(str(self.chunk_id))
+        self.chunk_id += 1
+        with open(chunk_name, 'wb') as out:
+            self._write_to_gzip(out)
+        
+        return PickledDataset(chunk_name)
 
-    def start(self):
-        self._new_buffer()
-
-    def add_record(self, key, value):
-        dump_pickle((key, value), self.buffer)
-        self.records += 1
-
-        if self.buffer.tell() > self.chunk_size:
-            self.flush()
-
-    def flush_to_memory(self):
+    def flush(self):
         tmp = StringIO()
         self._write_to_gzip(tmp)
         # Compress the data 
-        d = MemGZipDataset(tmp.getvalue())
-        self.files.append(d)
-
-    def finished(self):
-        if self.records > 0:
-            if self.always_to_disk:
-                self.flush()
-            else:
-                self.flush_to_memory()
-
-        return {0: self.files}
+        return MemGZipDataset(tmp.getvalue())
 
 class Chunker(object):
     def chunks(self):
@@ -364,22 +416,16 @@ class TextLineDataset(Dataset):
         pass
 
 class PickledDataset(Dataset):
-    def __init__(self, path, header_field=True):
+    def __init__(self, path):
         self.path = path
-        self.header_field = header_field
 
     def read(self):
         with gzip.GzipFile(self.path, 'rb', 1) as f:
-            if self.header_field:
-                n_records = pickle.load(f)
-                for _ in range(n_records):
+            try:
+                while True:
                     yield pickle.load(f)
-            else:
-                try:
-                    while True:
-                        yield pickle.load(f)
-                except EOFError:
-                    pass
+            except EOFError:
+                pass
 
     def delete(self):
         os.unlink(self.path)
@@ -395,9 +441,11 @@ class MemGZipDataset(Dataset):
 
     def read(self):
         with gzip.GzipFile(fileobj=StringIO(self.sio)) as sio:
-            n_records = pickle.load(sio)
-            for _ in range(n_records):
-                yield pickle.load(sio)
+            try:
+                while True:
+                    yield pickle.load(sio)
+            except EOFError:
+                pass
 
     def delete(self):
         pass

@@ -180,9 +180,10 @@ class PartialReduceCombiner(Combiner):
         return StreamDataset(self._combine(datasets))
 
 class Shuffler(object):
-    def __init__(self, n_partitions, splitter):
+    def __init__(self, n_partitions, splitter, writer_cls):
         self.n_partitions = n_partitions
         self.splitter = splitter
+        self.writer_cls = writer_cls
 
     def shuffle(self, fs, datasets):
         """
@@ -191,10 +192,11 @@ class Shuffler(object):
         raise NotImplementedError()
 
 class DefaultShuffler(Shuffler):
+
     def shuffle(self, fs, datasets):
         partitions = []
         for i in range(self.n_partitions):
-            writer = UnorderedWriter(fs.get_substage('partition_{}'.format(i)))
+            writer = self.writer_cls(fs.get_substage('partition_{}'.format(i)))
             writer.start()
             partitions.append(writer)
 

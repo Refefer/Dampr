@@ -119,7 +119,6 @@ class Graph(object):
         
 class RunnerBase(object):
     def __init__(self, name, graph, working_dir='/tmp'):
-
         self.file_system = FileSystem(os.path.join(working_dir, name))
         self.graph = graph
 
@@ -215,86 +214,6 @@ class RunnerBase(object):
 
         return ret
 
-def mr_map(job, out_q, stage, fs, n_partitions):
-    w_id = os.getpid()
-
-    # Default job, nothing special
-    dw = CSDatasetWriter(fs, Splitter(), n_partitions)
-
-    dw.start()
-    m_id, main, supplemental = job
-    logging.debug("Mapper %i: Computing map: %i", w_id, m_id)
-    for k, v in stage.mapper.map(main, *supplemental):
-        dw.add_record(k, v)
-
-    out_q.put((w_id, m_id, dw.finished()))
-    logging.debug("Mapper: %i: Finished", w_id)
-
-def sink_map(job, out_q, stage, path):
-    """
-    Writes line delimited items as a sink
-    """
-    w_id = os.getpid()
-
-    m_id, main, supplemental = job
-    # Default job, nothing special
-    dw = SinkWriter(path, m_id)
-
-    dw.start()
-    logging.debug("Sink %i: Computing map: %i", w_id, m_id)
-    for k, v in stage.mapper.map(main, *supplemental):
-        dw.add_record(k, v)
-
-    out_q.put((w_id, m_id, dw.finished()))
-    logging.debug("Sink: %i: Finished", w_id)
-
-def mrcs_map(job, out_q, stage, combiner, shuffler, fs, options):
-    """
-    Runs a more fine grained map/combine/shuffler
-    """
-    w_id = os.getpid()
-    dw = BufferedSortedDiskWriter(fs)
-
-    # Do we have a map side partial reducer?
-    binop = options.get('binop')
-    if callable(binop):
-        reduce_buffer = options.get('reduce_buffer', 1000)
-        if reduce_buffer > 0:
-            # Zero buffer means all reductions will happen reduce side
-            dw = ReducedWriter(dw, binop, max_values=reduce_buffer)
-
-    dw.start()
-    m_id, main, supplemental = job
-    logging.debug("Mapper %i: Computing map: %i", w_id, m_id)
-    for k, v in stage.mapper.map(main, *supplemental):
-        dw.add_record(k, v)
-
-    sources = dw.finished()[0]
-
-    if len(sources) > 1:
-        logging.debug("Combining outputs: found %i files", len(sources))
-        logging.debug("Combining: %s", sources)
-        combined_stream = combiner.combine(sources)
-    elif len(sources) == 1:
-        combined_stream = sources[0]
-    else:
-        combined_stream = EmptyDataset()
-
-    results = shuffler.shuffle(fs, [combined_stream])
-
-    out_q.put((w_id, m_id, results))
-    logging.debug("Mapper: %i: Finished", w_id)
-
-def mr_reduce(job, out_q, stage, dw):
-    w_id = os.getpid()
-    dw.start()
-    r_id, datasets= job
-    logging.debug("Reducer %i: Computing reduce: %i", w_id, r_id)
-    for k, v in stage.reducer.reduce(*datasets):
-        dw.add_record(k, v)
-
-    out_q.put((w_id, r_id, dw.finished()))
-    logging.debug("Reducer: %i: Finished", w_id)
 
 class StageRunner(object):
     def __init__(self, max_procs):
@@ -335,25 +254,92 @@ class StageRunner(object):
         return finished
 
 class MapStageRunner(StageRunner):
-    def __init__(self, max_procs, fs, n_partitions, mapper):
+    def __init__(self, max_procs, fs, n_partitions, mapper, options):
         super(MapStageRunner, self).__init__(max_procs)
         self.fs = fs
         self.n_partitions = n_partitions
         self.mapper = mapper
+        self.options = options
+
+    def simple_map(self, job, out_q, fs):
+        w_id = os.getpid()
+
+        # Default job, nothing special
+        if self.options.get('memory', False):
+            writer_cls = BufferedSortedMemoryWriter
+        else:
+            writer_cls = BufferedSortedDiskWriter
+
+        dw = CSDatasetWriter(fs, Splitter(), self.n_partitions, writer_cls=writer_cls)
+
+        dw.start()
+        m_id, main, supplemental = job
+        logging.debug("Mapper %i: Computing map: %i", w_id, m_id)
+        for k, v in self.mapper.mapper.map(main, *supplemental):
+            dw.add_record(k, v)
+
+        out_q.put((w_id, m_id, dw.finished()))
+        logging.debug("Mapper: %i: Finished", w_id)
+
+    def medium_map(self, job, out_q, combiner, shuffler, fs):
+        """
+        Runs a more fine grained map/combine/shuffler
+        """
+        w_id = os.getpid()
+        if self.options.get('memory', False):
+            dw = BufferedSortedMemoryWriter(fs)
+        else:
+            dw = BufferedSortedDiskWriter(fs)
+
+        # Do we have a map side partial reducer?
+        binop = self.options.get('binop')
+        if callable(binop):
+            reduce_buffer = self.options.get('reduce_buffer', 1000)
+            if reduce_buffer > 0:
+                # Zero buffer means all reductions will happen reduce side
+                dw = ReducedWriter(dw, binop, max_values=reduce_buffer)
+
+        dw.start()
+        m_id, main, supplemental = job
+        logging.debug("Mapper %i: Computing map: %i", w_id, m_id)
+        for k, v in self.mapper.mapper.map(main, *supplemental):
+            dw.add_record(k, v)
+
+        sources = dw.finished()[0]
+
+        if len(sources) > 1:
+            logging.debug("Combining outputs: found %i files", len(sources))
+            logging.debug("Combining: %s", sources)
+            combined_stream = combiner.combine(sources)
+        elif len(sources) == 1:
+            combined_stream = sources[0]
+        else:
+            combined_stream = EmptyDataset()
+
+        results = shuffler.shuffle(fs, [combined_stream])
+
+        out_q.put((w_id, m_id, results))
+        logging.debug("Mapper: %i: Finished", w_id)
+
 
     def execute_stage(self, t_id, payload, output_q):
         fs = self.fs.get_worker('map/{}'.format(t_id))
 
         if self.mapper.combiner is None and self.mapper.shuffler is None:
 
-            p = multiprocessing.Process(target=mr_map,
-                args=(payload, output_q, self.mapper, fs, self.n_partitions))
+            p = multiprocessing.Process(target=self.simple_map,
+                args=(payload, output_q, fs))
         else:
             c = NoopCombiner() if self.mapper.combiner is None else self.mapper.combiner
-            s = DefaultShuffler(self.n_partitions, Splitter())
+            if self.options.get('memory', False):
+                writer_cls = UnorderedDiskWriter
+            else:
+                writer_cls = UnorderedMemoryWriter
+
+            s = DefaultShuffler(self.n_partitions, Splitter(), writer_cls)
             o = self.mapper.options
-            p = multiprocessing.Process(target=mrcs_map,
-                args=(payload, output_q, self.mapper, c, s, fs, o))
+            p = multiprocessing.Process(target=self.medium_map,
+                args=(payload, output_q, c, s, fs))
 
         return p
 
@@ -370,23 +356,48 @@ class SinkStageRunner(StageRunner):
         self.path = path
         self.mapper = mapper
 
+    def sink(self, job, out_q):
+        """
+        Writes line delimited items as a sink
+        """
+        w_id = os.getpid()
+
+        m_id, main, supplemental = job
+        dw = SinkWriter(self.mapper.path, m_id)
+
+        dw.start()
+        logging.debug("Sink %i: Computing map: %i", w_id, m_id)
+        for k, v in self.mapper.mapper.map(main, *supplemental):
+            dw.add_record(k, v)
+
+        out_q.put((w_id, m_id, dw.finished()))
+        logging.debug("Sink: %i: Finished", w_id)
+
     def execute_stage(self, t_id, payload, output_q):
-        p = multiprocessing.Process(target=sink_map,
-            args=(payload, output_q, self.mapper, self.mapper.path))
+        p = multiprocessing.Process(target=self.sink,
+            args=(payload, output_q))
 
         return p
 
 class CombinerStageRunner(StageRunner):
-    def __init__(self, max_procs, fs, combiner):
+    """
+    Merges files together to reduce their on disk presence
+    """
+    def __init__(self, max_procs, fs, combiner, options):
         super(CombinerStageRunner, self).__init__(max_procs)
         self.fs = fs
         self.combiner = combiner
+        self.options = options
 
     def combine(self, payload, output_q, fs):
         w_id = os.getpid()
         t_id, datasets = payload
 
-        dw = ContiguousWriter(fs)
+        if self.options.get('memory', False):
+            dw = ContiguousMemoryWriter(fs)
+        else:
+            dw = ContiguousDiskWriter(fs)
+
         dw.start()
         for k,v in self.combiner.combine(datasets):
             dw.add_record(k,v)
@@ -405,18 +416,33 @@ class CombinerStageRunner(StageRunner):
         return p
 
 class ReduceStageRunner(StageRunner):
-    def __init__(self, max_procs, fs, reducer):
+    def __init__(self, max_procs, fs, reducer, options):
         super(ReduceStageRunner, self).__init__(max_procs)
         self.fs = fs
         self.reducer = reducer
+        self.options = options
+
+    def reduce(self, job, out_q, dw):
+        w_id = os.getpid()
+        dw.start()
+        r_id, datasets = job
+        logging.debug("Reducer %i: Computing reduce: %i", w_id, r_id)
+        for k, v in self.reducer.reducer.reduce(*datasets):
+            dw.add_record(k, v)
+
+        out_q.put((w_id, r_id, dw.finished()))
+        logging.debug("Reducer: %i: Finished", w_id)
 
     def execute_stage(self, t_id, payload, output_q):
         fs = self.fs.get_worker('red/{}'.format(t_id))
-        dw = ContiguousWriter(fs)
-        #dw = UnorderedWriter(fs)
 
-        m = multiprocessing.Process(target=mr_reduce,
-            args=(payload, output_q, self.reducer, dw))
+        if self.options.get('memory', False):
+            dw = ContiguousMemoryWriter(fs)
+        else:
+            dw = ContiguousDiskWriter(fs)
+
+        m = multiprocessing.Process(target=self.reduce,
+            args=(payload, output_q, dw))
 
         return m
 
@@ -433,6 +459,9 @@ class MTRunner(RunnerBase):
         self.max_files_per_stage = max_files_per_stage
 
     def chunk_list(self, v):
+        """
+        Given a list of files, creates subsets of those files.
+        """
         chunks = min(self.max_files_per_stage, self.n_maps)
         num_files = min(int(math.ceil(len(v) / float(chunks))), self.max_files_per_stage)
         return ((i, v[s:s+num_files])
@@ -444,9 +473,12 @@ class MTRunner(RunnerBase):
         if not isinstance(iter_dm, Chunker):
             iter_dm = DMChunker(iter_dm)
 
-        jobs_queue = ((i, chunk, data_mappings[1:]) for i, chunk in enumerate(iter_dm.chunks()))
+        jobs_queue = ((i, chunk, data_mappings[1:]) for 
+                i, chunk in enumerate(iter_dm.chunks()))
+
         stage_fs = self.file_system.get_stage(stage_id)
-        msr = MapStageRunner(self.n_maps, stage_fs, self.n_partitions, mapper)
+        n_maps = mapper.options.get('n_maps', self.n_maps)
+        msr = MapStageRunner(n_maps, stage_fs, self.n_partitions, mapper, mapper.options)
 
         finished = msr.run(jobs_queue)
 
@@ -457,7 +489,7 @@ class MTRunner(RunnerBase):
                 logging.debug("Partition %s needs to be merged: found %s files", k, len(v))
                 chunks = self.chunk_list(v)
                 c = NoopCombiner() if mapper.combiner is None else mapper.combiner
-                csr = CombinerStageRunner(self.n_maps, stage_fs, c)
+                csr = CombinerStageRunner(n_maps, stage_fs, c, mapper.options)
                 v = [f for fs in csr.run(chunks) for f in fs]
                 collapsed[k] = v
 
@@ -472,7 +504,8 @@ class MTRunner(RunnerBase):
                 transpose[k].append(dm.get(k, []))
         
         stage_fs = self.file_system.get_stage(stage_id)
-        rds = ReduceStageRunner(self.n_reducers, stage_fs, reducer)
+        n_reducers = reducer.options.get('n_reducers', self.n_reducers)
+        rds = ReduceStageRunner(n_reducers, stage_fs, reducer, reducer.options)
         finished = rds.run(iter(transpose.items()))
 
         return self.collapse_datamappings(finished)
@@ -485,6 +518,7 @@ class MTRunner(RunnerBase):
 
         jobs_queue = ((i, chunk, data_mappings[1:]) 
                 for i, chunk in enumerate(iter_dm.chunks()))
+        n_maps = sink.options.get('n_maps', self.n_maps)
         ssr = SinkStageRunner(self.n_maps, sink, sink.path)
 
         finished = ssr.run(jobs_queue)

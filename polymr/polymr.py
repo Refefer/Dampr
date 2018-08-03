@@ -163,10 +163,10 @@ class PMap(PBase):
 
         return ins
 
-    def cached(self):
+    def cached(self, **options):
         # Run the pipeline, load it into memory, and create a new graph
-        results = self.checkpoint().run()
-        return Polymr.from_dataset(results.datasets)
+        options['memory'] = True
+        return self.checkpoint(options=options)
 
     def sink(self, path):
         aggs = [Map(_identity)] if len(self.agg) == 0 else self.agg[:]
