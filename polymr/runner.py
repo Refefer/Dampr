@@ -259,7 +259,9 @@ def mrcs_map(job, out_q, stage, combiner, shuffler, fs, options):
     binop = options.get('binop')
     if callable(binop):
         reduce_buffer = options.get('reduce_buffer', 1000)
-        dw = ReducedWriter(dw, binop, max_values=reduce_buffer)
+        if reduce_buffer > 0:
+            # Zero buffer means all reductions will happen reduce side
+            dw = ReducedWriter(dw, binop, max_values=reduce_buffer)
 
     dw.start()
     m_id, main, supplemental = job
