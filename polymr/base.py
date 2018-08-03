@@ -143,9 +143,9 @@ class OuterJoin(Reducer):
             right = next(g1, None)
 
 
-class KeyedLeftJoin(LeftJoin):
+class KeyedOuterJoin(OuterJoin):
     def reduce(self, *datasets):
-        for k, v in super(KeyedLeftJoin, self).reduce(*datasets):
+        for k, v in super(KeyedOuterJoin, self).reduce(*datasets):
             yield k, (k, v)
 
 class Combiner(object):

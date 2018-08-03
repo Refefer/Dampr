@@ -37,7 +37,7 @@ class DatasetWriter(object):
         raise NotImplementedError()
 
 
-class BufferedWriter(DatasetWriter):
+class BufferedWriter(object):
     def __init__(self, f, max_size=1024**2):
         self.f = f
         self.max_size = max_size
@@ -63,8 +63,13 @@ class BufferedWriter(DatasetWriter):
         self.f.close()
  
 class ReducedWriter(DatasetWriter):
+    """
+    Used when a binary reducer function can partially join records on
+    the Map side.  Writes out to an underlying DataWriter when the number
+    of unique values in active reduction exceed a certain threshold
+    """
     SENTINEL = object()
-    def __init__(self, dw, binop, max_values=1000):
+    def __init__(self, dw, binop, max_values):
         self.dw = dw
         self.binop = binop
         self.max_values = max_values
@@ -95,6 +100,11 @@ class ReducedWriter(DatasetWriter):
         return self.dw.finished()
 
 class BufferedSortedWriter(DatasetWriter):
+    """
+    Used for most Map writers.  Takes key value pairs, serializes them
+    with Pickle, and writes them to an internal buffer.  When the internal
+    buffer exceeds the provided space, it flushes it to a new file on disk.
+    """
     def __init__(self, fs, buffer_size=1*1024**2, always_to_disk=True):
         self.fs = fs
         self.buffer_size = buffer_size
@@ -104,13 +114,6 @@ class BufferedSortedWriter(DatasetWriter):
         self.files = []
         self.buffer = StringIO()
         self.keyoffs = []
-
-    def write_batch_to_disk(self):
-        path = self.fs.get_file(str(len(self.files)))
-        with open(path, 'wb') as out:
-            self._write_to_gzip(out)
-
-        return path
 
     def _write_to_gzip(self, f):
         with gzip.GzipFile(fileobj=f, mode='wb', compresslevel=1) as f:
@@ -127,20 +130,8 @@ class BufferedSortedWriter(DatasetWriter):
         for _, start, stop in self.keyoffs:
             yield v[start:stop]
 
-    def flush_to_disk(self):
-        file_name = self.write_batch_to_disk()
-        dataset = PickledDataset(file_name)
-        self.files.append(dataset)
-        self.buffer.truncate(0)
-        self.buffer.seek(0)
-        self.keyoffs = []
-
-    def flush_to_memory(self):
-        sio = StringIO()
-        self._write_to_gzip(sio)
-        self.files.append(MemGZipDataset(sio.getvalue()))
-        self.buffer.truncate(0)
-        self.keyoffs = []
+    def flush(self):
+        raise NotImplementedError()
 
     def _write_to_buffer(self, key, value):
         key_start = self.buffer.tell()
@@ -151,30 +142,68 @@ class BufferedSortedWriter(DatasetWriter):
         kvs, kvst = self._write_to_buffer(key, value)
         self.keyoffs.append((key, kvs, kvst))
         if self.buffer.tell() > self.buffer_size:
-            self.flush_to_disk()
+            self._flush_buffer()
+
+    def reset(self):
+        self.buffer.truncate(0)
+        self.buffer.seek(0)
+        self.keyoffs = []
+
+    def _flush_buffer(self):
+        dataset = self.flush()
+        self.files.append(dataset)
+        self.reset()
 
     def finished(self):
         if self.buffer.tell() > 0:
-            if self.always_to_disk:
-                self.flush_to_disk()
-            else:
-                self.flush_to_memory()
+            self._flush_buffer()
 
         return {0: self.files}
 
+class BufferedSortedMemoryWriter(BufferedSortedWriter):
+    """
+    Writes out the Buffer to Memory
+    """
+    def __init__(self, fs, buffer_size=1*1024**2):
+        self.fs = fs
+        self.buffer_size = buffer_size
+
+    def flush(self):
+        sio = StringIO()
+        self._write_to_gzip(sio)
+        return MemGZipDataset(sio.getvalue())
+
+class BufferedSortedDiskWriter(BufferedSortedWriter):
+    """
+    Writes out Buffer to Disk
+    """
+    def write_batch_to_disk(self):
+        path = self.fs.get_file(str(len(self.files)))
+        with open(path, 'wb') as out:
+            self._write_to_gzip(out)
+
+        return path
+
+    def flush(self):
+        file_name = self.write_batch_to_disk()
+        return PickledDataset(file_name)
+
 class CSDatasetWriter(DatasetWriter):
     def __init__(self, worker_fs, splitter, n_partitions, 
-            buffer_size=10*1024*1024):
+            buffer_size=10*1024*1024, writer_cls=BufferedSortedDiskWriter):
         super(CSDatasetWriter, self).__init__(worker_fs)
         self.splitter     = splitter
         self.n_partitions = n_partitions
         self.buffer_size  = buffer_size
 
+        assert issubclass(writer_cls, BufferedSortedWriter)
+        self.writer_cls = writer_cls
+
     def start(self):
         self.partitions = []
         for i in range(self.n_partitions):
             sub_fs = self.worker_fs.get_substage('partition_{}'.format(i))
-            self.partitions.append(BufferedSortedWriter(sub_fs, self.buffer_size))
+            self.partitions.append(self.writer_cls(sub_fs, self.buffer_size))
             self.partitions[-1].start()
 
     def add_record(self, key, value):

@@ -155,7 +155,7 @@ class PolymrTest(unittest.TestCase):
         output = sink.count()
 
         results = list(output.run())
-        self.assertEquals([('{}\n'.format(i), 1) for i in range(10, 20)], results)
+        self.assertEquals([('{}'.format(i), 1) for i in range(10, 20)], results)
 
         shutil.rmtree(path)
 

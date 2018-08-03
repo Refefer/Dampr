@@ -253,7 +253,7 @@ def mrcs_map(job, out_q, stage, combiner, shuffler, fs, options):
     Runs a more fine grained map/combine/shuffler
     """
     w_id = os.getpid()
-    dw = BufferedSortedWriter(fs, always_to_disk=False)
+    dw = BufferedSortedDiskWriter(fs)
 
     # Do we have a map side partial reducer?
     binop = options.get('binop')
