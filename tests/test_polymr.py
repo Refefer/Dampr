@@ -1,3 +1,4 @@
+import shutil
 import itertools
 import unittest
 
@@ -6,7 +7,7 @@ from polymr import Polymr
 class PolymrTest(unittest.TestCase):
     def setUp(self):
         items = list(range(10, 20))
-        self.items = Polymr.memory(items)
+        self.items = Polymr.memory(items, partitions=2)
 
     def test_identity(self):
         results = self.items.run()
@@ -142,6 +143,21 @@ class PolymrTest(unittest.TestCase):
 
         results = list(output.run())
         self.assertEquals([], results)
+
+    def test_sink(self):
+        """
+        Test Sinking to disk works and doesn't delete on cleanup
+        """
+        path = "/tmp/polymr_test_sink"
+        sink = self.items.map(lambda x: str(x)) \
+                .sink(path=path)
+
+        output = sink.count()
+
+        results = list(output.run())
+        self.assertEquals([('{}\n'.format(i), 1) for i in range(10, 20)], results)
+
+        shutil.rmtree(path)
 
 if __name__ == '__main__':
     unittest.main()

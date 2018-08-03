@@ -1,3 +1,4 @@
+from __future__ import print_function
 import gzip
 import os
 import sys
@@ -183,6 +184,23 @@ class CSDatasetWriter(DatasetWriter):
     def finished(self):
         return {i: p.finished()[0] for i, p in enumerate(self.partitions)}
 
+class SinkWriter(DatasetWriter):
+    def __init__(self, path, idx):
+        super(SinkWriter, self).__init__(None)
+        self.path = path
+        self.idx = idx
+        self.fname = os.path.join(self.path, str(self.idx))
+
+    def start(self):
+        self.f = open(self.fname, 'w')
+
+    def add_record(self, key, value):
+        print(value, file=self.f)
+
+    def finished(self):
+        self.f.close()
+        return {0: [TextLineDataset(self.fname)]}
+
 class ContiguousWriter(DatasetWriter):
     def __init__(self, worker_fs):
         super(ContiguousWriter, self).__init__(worker_fs)
@@ -305,7 +323,7 @@ class TextLineDataset(Dataset):
                 cur_pos += len(f.readline())
 
             for i, line in enumerate(f):
-                yield self.start + i, line
+                yield self.start + i, line.rstrip(os.linesep)
                 cur_pos += len(line)
                 if self.end is not None and cur_pos > self.end:
                     break
@@ -424,6 +442,18 @@ class StreamDataset(Dataset):
 
     def delete(self):
         pass
+
+class DirectoryInput(Chunker):
+    def __init__(self, directory, chunk_size=64*1024**2):
+        self.directory = directory
+        self.chunk_size = chunk_size
+
+    def chunks(self):
+        for root, dirs, files in os.walk(self.directory):
+            for fname in files:
+                path = os.path.join(root, fname)
+                for chunk in TextInput(path, self.chunk_size).chunks():
+                    yield chunk
 
 class TextInput(Chunker):
     def __init__(self, path, chunk_size=64*1024**2):

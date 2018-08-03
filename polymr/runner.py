@@ -1,5 +1,6 @@
 import math
 import os
+import shutil
 import logging
 import multiprocessing
 from multiprocessing import Queue
@@ -45,6 +46,14 @@ class GReduce(object):
         self.reducer = reducer
         self.options = options if options is not None else  {}
 
+class GSink(object):
+    def __init__(self, output, inputs, mapper, path, options=None):
+        self.output = output
+        self.inputs = inputs
+        self.mapper = mapper
+        self.path = path
+        self.options = options if options is not None else  {}
+
 class Graph(object):
     def __init__(self):
         self.inputs = {}
@@ -87,6 +96,17 @@ class Graph(object):
         ng.stages.append(GReduce(inp, inputs, reducer, options))
         return inp, ng
 
+    def add_sink(self, inputs, mapper, path, name=None, options=None):
+        assert isinstance(mapper, Mapper)
+        assert all(isinstance(inp, Source) for inp in inputs)
+        if name is None:
+            name = 'Sink: {}'
+
+        inp = Source(name.format(path))
+        ng = self._copy_graph()
+        ng.stages.append(GSink(inp, inputs, mapper, path, options))
+        return inp, ng
+
     def union(self, other_graph):
         ng = self._copy_graph()
         ng.inputs.update(other_graph.inputs)
@@ -107,6 +127,9 @@ class RunnerBase(object):
         raise NotImplementedError()
 
     def run_reduce(self, stage_id, data, reducer):
+        raise NotImplementedError()
+
+    def run_sink(self, stage_id, data, reducer):
         raise NotImplementedError()
 
     def format_outputs(self, outputs):
@@ -137,7 +160,6 @@ class RunnerBase(object):
         to_delete = set()
         splitter = Splitter()
         for stage_id, stage in enumerate(self.graph.stages):
-        #for stage_id, (source, inputs, func) in enumerate(self.graph.stages):
             logging.info("Starting stage %s/%s", stage_id, len(self.graph.stages))
             logging.debug("Function - %s", type(stage))
             input_data = [data[i] for i in stage.inputs]
@@ -146,17 +168,25 @@ class RunnerBase(object):
 
             logging.debug("Output: %s", stage.output)
 
+            cleanup_stage = True
             if isinstance(stage, GMap):
                 data_mapping = self.run_map(stage_id, input_data, stage)
 
             elif isinstance(stage, GReduce):
                 data_mapping = self.run_reducer(stage_id, input_data, stage)
+
+            elif isinstance(stage, GSink):
+                data_mapping = self.run_sink(stage_id, input_data, stage)
+                # We're sinking to disk, don't delete it
+                cleanup_stage = False
+
             else:
                 raise TypeError("Unknown type")
 
             assert isinstance(data_mapping, dict)
             data[stage.output] = data_mapping
-            to_delete.add(stage.output)
+            if cleanup_stage:
+                to_delete.add(stage.output)
 
         # Collect the outputs and determine what to delete
         ret = []
@@ -199,6 +229,24 @@ def mr_map(job, out_q, stage, fs, n_partitions):
 
     out_q.put((w_id, m_id, dw.finished()))
     logging.debug("Mapper: %i: Finished", w_id)
+
+def sink_map(job, out_q, stage, path):
+    """
+    Writes line delimited items as a sink
+    """
+    w_id = os.getpid()
+
+    m_id, main, supplemental = job
+    # Default job, nothing special
+    dw = SinkWriter(path, m_id)
+
+    dw.start()
+    logging.debug("Sink %i: Computing map: %i", w_id, m_id)
+    for k, v in stage.mapper.map(main, *supplemental):
+        dw.add_record(k, v)
+
+    out_q.put((w_id, m_id, dw.finished()))
+    logging.debug("Sink: %i: Finished", w_id)
 
 def mrcs_map(job, out_q, stage, combiner, shuffler, fs, options):
     """
@@ -307,6 +355,25 @@ class MapStageRunner(StageRunner):
 
         return p
 
+class SinkStageRunner(StageRunner):
+    def __init__(self, max_procs, mapper, path):
+        super(SinkStageRunner, self).__init__(max_procs)
+        if not os.path.exists(path):
+            try:
+                os.makedirs(path)
+            except OSError as e:
+                if e.errno != 17:
+                    raise
+
+        self.path = path
+        self.mapper = mapper
+
+    def execute_stage(self, t_id, payload, output_q):
+        p = multiprocessing.Process(target=sink_map,
+            args=(payload, output_q, self.mapper, self.mapper.path))
+
+        return p
+
 class CombinerStageRunner(StageRunner):
     def __init__(self, max_procs, fs, combiner):
         super(CombinerStageRunner, self).__init__(max_procs)
@@ -405,6 +472,20 @@ class MTRunner(RunnerBase):
         stage_fs = self.file_system.get_stage(stage_id)
         rds = ReduceStageRunner(self.n_reducers, stage_fs, reducer)
         finished = rds.run(iter(transpose.items()))
+
+        return self.collapse_datamappings(finished)
+
+    def run_sink(self, stage_id, data_mappings, sink):
+        # if we get more than two input mappings, we only iterate over the first one
+        iter_dm = data_mappings[0]
+        if not isinstance(iter_dm, Chunker):
+            iter_dm = DMChunker(iter_dm)
+
+        jobs_queue = ((i, chunk, data_mappings[1:]) 
+                for i, chunk in enumerate(iter_dm.chunks()))
+        ssr = SinkStageRunner(self.n_maps, sink, sink.path)
+
+        finished = ssr.run(jobs_queue)
 
         return self.collapse_datamappings(finished)
 

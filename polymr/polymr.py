@@ -1,5 +1,6 @@
 import itertools
 import sys
+import operator
 import time
 import logging
 import json
@@ -7,7 +8,7 @@ import random
 
 from .base import *
 from .runner import MTRunner, Graph, Source
-from .dataset import MemoryInput, TextInput, Chunker
+from .dataset import MemoryInput, DirectoryInput, TextInput, Chunker
 
 class ValueEmitter(object):
     def __init__(self, datasets):
@@ -77,7 +78,7 @@ class PMap(PBase):
             name = ' -> ' .join('{}'.format(a.mapper.__name__) for a in aggs)
             name = 'Stage {}: %s => %s' % (self.source, name)
             source, pmer = self.pmer._add_mapper([self.source], 
-                    Map(combine(aggs)), 
+                    Map(fuse(aggs)), 
                     combiner=combiner,
                     name=name,
                     options=options)
@@ -138,17 +139,25 @@ class PMap(PBase):
         pmer = Polymr(me.pmer.graph.union(other.pmer.graph))
         return PJoin(me.source, pmer, other.source)
 
-    def count(self, key=lambda x: x):
+    def count(self, key=lambda x: x, **options):
         return self.a_group_by(key, lambda v: 1) \
-                .reduce(lambda x,y: x + y)
+                .reduce(operator.add, **options)
 
-    def inspect(self, prefix="", run_exit=False):
+    def mean(self, key=lambda x: 1, value=lambda x: x, **options):
+        def _binop(x, y):
+            return x[0] + y[0], x[1] + y[1]
+
+        return self.a_group_by(key, lambda v: (value(v), 1)) \
+                .reduce(_binop, **options) \
+                .map(lambda x: (x[0], x[1][0] / float(x[1][1])))
+
+    def inspect(self, prefix="", exit=False):
         def _inspect(k, v):
             print("{}: {}".format(prefix, v))
             yield k, v
 
         ins = self._add_map(_inspect)
-        if run_exit:
+        if exit:
             ins.run()
             sys.exit(0)
 
@@ -157,7 +166,24 @@ class PMap(PBase):
     def cached(self):
         # Run the pipeline, load it into memory, and create a new graph
         results = self.checkpoint().run()
-        return Polymr.from_dataset(results.datasets[0])
+        return Polymr.from_dataset(results.datasets)
+
+    def sink(self, path):
+        aggs = [Map(_identity)] if len(self.agg) == 0 else self.agg[:]
+        name = ' -> ' .join('{}'.format(a.mapper.__name__) for a in aggs)
+        name = 'Stage {}: %s => %s' % (self.source, name)
+        source, pmer = self.pmer._add_sink([self.source], 
+                Map(fuse(aggs)), 
+                path=path,
+                name=name,
+                options=None)
+        return PMap(source, pmer) 
+
+    def sink_tsv(self, path):
+        return self.map(lambda x: u'\t'.join(str(p) for p in x)).sink(path)
+
+    def sink_json(self, path):
+        return self.map(json.dumps).sink(path)
 
 class ARReduce(object):
     def __init__(self, pmap):
@@ -257,7 +283,12 @@ class Polymr(object):
 
     @classmethod
     def text(cls, fname, chunk_size=16*1024**2):
-        source, ng = Graph().add_input(TextInput(fname, chunk_size))
+        if os.path.isdir(fname):
+            inp = DirectoryInput(fname, chunk_size)
+        else:
+            inp = TextInput(fname, chunk_size)
+
+        source, ng = Graph().add_input(inp)
         return PMap(source, Polymr(ng))
 
     @classmethod
@@ -299,21 +330,25 @@ class Polymr(object):
         output, ng = self.graph.add_reducer(*args, **kwargs)
         return output, Polymr(ng)
 
-def combine(aggs):
+    def _add_sink(self, *args, **kwargs): 
+        output, ng = self.graph.add_sink(*args, **kwargs)
+        return output, Polymr(ng)
+
+def fuse(aggs):
     if len(aggs) == 1:
         return aggs[0].mapper
 
     def run(it, agg):
         return ((ki, vi) for k, v in it for ki, vi in agg.mapper(k, v))
 
-    def _combine(k, v):
+    def _fuse(k, v):
         it = iter([(k, v)])
         for agg in aggs:
             it = run(it, agg)
 
         return it
 
-    return _combine
+    return _fuse
 
 # This reinitializaes everytime
 RANDOM = None
