@@ -24,7 +24,9 @@ def main(fname):
 
     # Character lengths
     word_lengths = top_words \
-            .fold_by(lambda tc: len(tc[0]), value=lambda tc: tc[1], binop=lambda x,y: x+y) \
+            .fold_by(lambda tc: len(tc[0]), 
+                    value=lambda tc: tc[1], 
+                    binop=lambda x,y: x+y)
             .sort_by(lambda cl: cl[0])
 
     # Average character length

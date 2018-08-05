@@ -124,11 +124,11 @@ class PMap(PBase):
     def fold_by(self, key, binop, value=lambda x: x, **options):
         return self.a_group_by(key, value).reduce(binop, **options)
 
-    def sort_by(self, key):
+    def sort_by(self, key, **options):
         def _sort_by(_key, value):
             yield key(value), value
 
-        return self._add_map(_sort_by).checkpoint()
+        return self._add_map(_sort_by).checkpoint(options=options)
 
     def join(self, other):
         assert isinstance(other, PBase)
@@ -189,7 +189,7 @@ class ARReduce(object):
     def __init__(self, pmap):
         self.pmap = pmap
 
-    def reduce(self, binop, reduce_buffer=1000):
+    def reduce(self, binop, reduce_buffer=1000, **options):
         def _reduce(key, vs):
             acc = next(vs)
             for v in vs:
@@ -198,7 +198,7 @@ class ARReduce(object):
             return acc
 
         red = Reduce(_reduce)
-        options = {"binop": binop, "reduce_buffer": reduce_buffer}
+        options = options.update({"binop": binop, "reduce_buffer": reduce_buffer})
         # We add the associative aggregator to the combiner during map
         pm = self.pmap.checkpoint(True, 
                 combiner=PartialReduceCombiner(red), 

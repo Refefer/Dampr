@@ -159,7 +159,7 @@ class RunnerBase(object):
         to_delete = set()
         splitter = Splitter()
         for stage_id, stage in enumerate(self.graph.stages):
-            logging.info("Starting stage %s/%s", stage_id, len(self.graph.stages))
+            logging.info("Starting stage %s/%s", stage_id + 1, len(self.graph.stages))
             logging.debug("Function - %s", type(stage))
             input_data = [data[i] for i in stage.inputs]
             for i, id in enumerate(input_data):
