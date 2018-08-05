@@ -527,21 +527,15 @@ class MTRunner(RunnerBase):
 
     def format_outputs(self, outputs):
         
-        was_mapped = len(self.graph.stages) == 0 or \
-                isinstance(self.graph.stages[-1], GMap)
-
         # if mapped, we ordered the output so we use a merged dataset
-        reduction = 0
         ret = []
         for output in outputs:
             while len(output) > self.max_files_per_stage:
                 stage_fs = self.file_system.get_stage('final_combine')
 
-                reduction += 1
-
                 logging.debug("Combining final files: found %i", len(output))
-                c = NoopCombiner() if was_mapped else UnorderedCombiner()
-                csr = CombinerStageRunner(self.n_maps, stage_fs, c)
+                c = NoopCombiner() 
+                csr = CombinerStageRunner(self.n_maps, stage_fs, c, {})
                 jobs = self.chunk_list(output)
                 output = [p for ps in csr.run(jobs) for p in ps]
 
