@@ -198,7 +198,7 @@ class ARReduce(object):
             return acc
 
         red = Reduce(_reduce)
-        options = options.update({"binop": binop, "reduce_buffer": reduce_buffer})
+        options.update({"binop": binop, "reduce_buffer": reduce_buffer})
         # We add the associative aggregator to the combiner during map
         pm = self.pmap.checkpoint(True, 
                 combiner=PartialReduceCombiner(red), 
