@@ -5,6 +5,7 @@ import unittest
 from polymr import Polymr
 
 class PolymrTest(unittest.TestCase):
+
     def setUp(self):
         items = list(range(10, 20))
         self.items = Polymr.memory(items, partitions=2)
@@ -171,6 +172,23 @@ class PolymrTest(unittest.TestCase):
 
         results = list(output.run())
         self.assertEquals([(str(i), 1) for i in range(10, 20)], results)
+
+    def test_cross_join(self):
+        """
+        Tests cross product
+        """
+        total = self.items \
+                .a_group_by(lambda x: 1) \
+                    .sum()
+
+        output = self.items \
+                .cross_tiny_right(total, lambda v1, v2: round(v1 / float(v2[1]), 4)) \
+                .sort_by(lambda x: x)
+
+        results = list(output.run())
+        count = sum(range(10, 20))
+        expected = [round(i / float(count), 4) for i in range(10, 20)]
+        self.assertEquals(expected, results)
 
 if __name__ == '__main__':
     unittest.main()

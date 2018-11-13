@@ -29,14 +29,17 @@ class Reducer(object):
         raise NotImplementedError()
 
     def yield_groups(self, dataset):
+        return self.group_datasets(dataset).grouped_read()
+
+    def group_datasets(self, dataset):
         if len(dataset) > 1:
             dataset = MergeDataset(dataset)
         elif len(dataset) == 1:
             dataset = dataset[0]
         else:
             dataset = EmptyDataset()
-
-        return dataset.grouped_read()
+        
+        return dataset
 
 class Reduce(Reducer):
     """
@@ -111,6 +114,21 @@ class KeyedLeftJoin(LeftJoin):
         for k, v in super(KeyedLeftJoin, self).reduce(*datasets):
             yield k, (k, v)
 
+class CrossJoin(Reduce):
+    def __init__(self, joiner_f):
+        self.joiner_f = joiner_f
+
+    def reduce(self, *datasets):
+        assert len(datasets) == 2
+        for left in self.group_datasets(datasets[0]).read():
+            for right in self.group_datasets(datasets[1]).read():
+                yield self.joiner_f(left[0], left[1], right[0], right[1])
+
+class KeyedCrossJoin(CrossJoin):
+    def reduce(self, *datasets):
+        for k, v in super(KeyedCrossJoin, self).reduce(*datasets):
+            yield k, (k, v)
+
 class OuterJoin(Reducer):
     def __init__(self, joiner_f, default=lambda: iter([])):
         self.joiner_f = joiner_f
@@ -141,7 +159,6 @@ class OuterJoin(Reducer):
         while right is not None:
             yield right[0], self.joiner_f(right[0], self.default(), right[1])
             right = next(g1, None)
-
 
 class KeyedOuterJoin(OuterJoin):
     def reduce(self, *datasets):

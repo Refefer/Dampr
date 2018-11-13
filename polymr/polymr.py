@@ -185,6 +185,24 @@ class PMap(PBase):
     def sink_json(self, path):
         return self.map(json.dumps).sink(path)
 
+    def cross_tiny_right(self, other, cross, partitions=20):
+        assert isinstance(other, PMap)
+        def _rand_int(x):
+            return (get_rand().randint(0, partitions), x)
+
+        g = self.map(_rand_int).group_by(lambda x: x[0], lambda x: x[1])
+
+        def _to_partition(x):
+            for i in range(partitions):
+                yield i, x
+
+        go = other.flat_map(_to_partition).group_by(lambda x: x[0], lambda x: x[1])
+
+        return g.join(go)._cross(cross)
+
+    def cross_tiny_left(self, other, cross, partitions=20):
+        return other.cross_tiny_right(self, cross, partitions)
+
 class ARReduce(object):
     def __init__(self, pmap):
         self.pmap = pmap
@@ -263,6 +281,15 @@ class PJoin(PBase):
         source, pmer = self.pmer._add_reducer([self.source, self.right], 
                 KeyedLeftJoin(_reduce))
         return PMap(source, pmer)
+
+    def _cross(self, crosser):
+        def _cross(k1, v1, k2, v2):
+            return k1, crosser(v1, v2)
+
+        source, pmer = self.pmer._add_reducer([self.source, self.right],
+                KeyedCrossJoin(_cross))
+
+        return PMap(source, pmer).map(lambda x: x[1])
 
 class Polymr(object):
     def __init__(self, graph=None, runner=None):
