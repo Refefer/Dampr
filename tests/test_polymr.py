@@ -190,5 +190,17 @@ class PolymrTest(unittest.TestCase):
         expected = [round(i / float(count), 4) for i in range(10, 20)]
         self.assertEquals(expected, results)
 
+    def test_cross_join_multi(self):
+        """
+        Tests cross product of multiple values
+        """
+        output = self.items \
+                .cross_tiny_left(self.items, lambda v1, v2: v1 * v2)
+
+        results = sorted(list(output.run()))
+        expected = sorted([i * k for i in range(10, 20) for k in range(10, 20)])
+        self.assertEquals(expected, results)
+
+
 if __name__ == '__main__':
     unittest.main()
