@@ -1,5 +1,6 @@
 from __future__ import print_function
 import gzip
+from math import ceil
 import os
 import sys
 import itertools
@@ -494,7 +495,7 @@ class MergeDataset(Dataset, Chunker):
         for d in self.datasets:
             d.delete()
 
-class MemoryDataset(Dataset, Chunker):
+class MemoryDataset(Dataset):
     def __init__(self, kvs, partitions=13):
         self.kvs = kvs
         self.partitions = partitions
@@ -507,11 +508,14 @@ class MemoryDataset(Dataset, Chunker):
         pass
 
     def chunks(self):
-        chunk_size = len(self.kvs) / self.partitions
-        start = 0
-        while start < len(self.vs):
-            yield MemoryDataset(self.kvs[start:start+chunk_size])
-            start += chunk_size
+        if self.partitions == 1:
+            yield self
+        else:
+            chunk_size = int(ceil(len(self.kvs) / float(self.partitions)))
+            start = 0
+            while start < len(self.kvs):
+                yield MemoryDataset(self.kvs[start:start+chunk_size], 1)
+                start += chunk_size
 
 class StreamDataset(Dataset):
     def __init__(self, it):

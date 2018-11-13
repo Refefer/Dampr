@@ -33,16 +33,13 @@ class MapCrossJoin(Mapper):
 
     def map(self, *datasets):
         assert len(datasets) == 2
-        left, right = datasets
-        for key, value in self.group_datasets(left).read():
-            for key2, value2 in self.group_datasets(right).read():
-                for k2, v2 in self.crosser(key, value, key2, value2):
-                    yield k2, v2
+        left, right = [self.group_datasets(d) for d in datasets]
+        for key, value in left.read():
+            for key2, value2 in right.read():
+                for k3, v3 in self.crosser(key, value, key2, value2):
+                    yield k3, v3
 
     def group_datasets(self, dataset):
-        if isinstance(dataset, Dataset):
-            dataset = [dataset]
-
         if isinstance(dataset, Chunker):
             dataset = list(dataset.chunks())
         
