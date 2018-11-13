@@ -473,7 +473,14 @@ class MTRunner(RunnerBase):
         if not isinstance(iter_dm, Chunker):
             iter_dm = DMChunker(iter_dm)
 
-        jobs_queue = ((i, chunk, data_mappings[1:]) for 
+        supplementary = []
+        for dm in data_mappings[1:]:
+            if not isinstance(dm, Chunker):
+                dm = DMChunker(dm)
+
+            supplementary.append(list(dm.chunks()))
+
+        jobs_queue = ((i, chunk, supplementary) for 
                 i, chunk in enumerate(iter_dm.chunks()))
 
         stage_fs = self.file_system.get_stage(stage_id)

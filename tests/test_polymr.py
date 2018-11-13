@@ -201,6 +201,5 @@ class PolymrTest(unittest.TestCase):
         expected = sorted([i * k for i in range(10, 20) for k in range(10, 20)])
         self.assertEquals(expected, results)
 
-
 if __name__ == '__main__':
     unittest.main()

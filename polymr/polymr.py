@@ -185,23 +185,25 @@ class PMap(PBase):
     def sink_json(self, path):
         return self.map(json.dumps).sink(path)
 
-    def cross_tiny_right(self, other, cross, partitions=20):
+    def cross_tiny_right(self, other, cross):
         assert isinstance(other, PMap)
-        def _rand_int(x):
-            return (get_rand().randint(0, partitions), x)
+        return other.cross_tiny_left(self, cross)
 
-        g = self.map(_rand_int).group_by(lambda x: x[0], lambda x: x[1])
+    def cross_tiny_left(self, other, cross, **options):
+        def _cross(k1, v1, k2, v2):
+            yield k1, cross(v1, v2)
 
-        def _to_partition(x):
-            for i in range(partitions):
-                yield i, x
+        pmer = self.checkpoint()
+        other = other.checkpoint()
+        name = 'Stage {}: (%s X %s)' % (self.source, other.source)
+        source, pmer = self.pmer._add_mapper([other.source, self.source], 
+                MapCrossJoin(_cross), 
+                combiner=None,
+                name=name,
+                options=options)
+        return PMap(source, pmer) 
 
-        go = other.flat_map(_to_partition).group_by(lambda x: x[0], lambda x: x[1])
-
-        return g.join(go)._cross(cross)
-
-    def cross_tiny_left(self, other, cross, partitions=20):
-        return other.cross_tiny_right(self, cross, partitions)
+        #return other.cross_tiny_right(self, cross, partitions)
 
 class ARReduce(object):
     def __init__(self, pmap):

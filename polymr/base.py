@@ -1,7 +1,7 @@
 import uuid
 import os
 
-from .dataset import UnorderedWriter, StreamDataset, MergeDataset, EmptyDataset, CatDataset
+from .dataset import *
 
 class Splitter(object):
     def partition(self, key, n_partitions):
@@ -23,6 +23,38 @@ class Map(Mapper):
         for key, value in datasets[0].read():
             for k2, v2 in self.mapper(key, value):
                 yield k2, v2
+
+class MapCrossJoin(Mapper):
+    """
+    Standard Mapper
+    """
+    def __init__(self, crosser):
+        self.crosser = crosser 
+
+    def map(self, *datasets):
+        assert len(datasets) == 2
+        left, right = datasets
+        for key, value in self.group_datasets(left).read():
+            for key2, value2 in self.group_datasets(right).read():
+                for k2, v2 in self.crosser(key, value, key2, value2):
+                    yield k2, v2
+
+    def group_datasets(self, dataset):
+        if isinstance(dataset, Dataset):
+            dataset = [dataset]
+
+        if isinstance(dataset, Chunker):
+            dataset = list(dataset.chunks())
+        
+        if len(dataset) > 1:
+            dataset = CatDataset(dataset)
+        elif len(dataset) == 1:
+            dataset = dataset[0]
+        else:
+            dataset = EmptyDataset()
+        
+        return dataset
+
 
 class Reducer(object):
     def reduce(self, *datasets):

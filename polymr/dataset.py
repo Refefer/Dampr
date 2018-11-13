@@ -366,7 +366,7 @@ class Chunker(object):
     def chunks(self):
         raise NotImplementedError()
 
-class Dataset(object):
+class Dataset(Chunker):
 
     def read(self):
         raise NotImplementedError()
@@ -381,6 +381,9 @@ class Dataset(object):
 
     def __iter__(self):
         return self.read()
+
+    def chunks(self):
+        yield self
 
 class EmptyDataset(Dataset):
 
