@@ -195,8 +195,9 @@ class PMap(PBase):
 
         pmer = self.checkpoint()
         other = other.checkpoint()
+        pmer = Polymr(self.pmer.graph.union(other.pmer.graph))
         name = 'Stage {}: (%s X %s)' % (self.source, other.source)
-        source, pmer = self.pmer._add_mapper([other.source, self.source], 
+        source, pmer = pmer._add_mapper([other.source, self.source], 
                 MapCrossJoin(_cross), 
                 combiner=None,
                 name=name,
