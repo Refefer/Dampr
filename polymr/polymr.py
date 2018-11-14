@@ -180,7 +180,7 @@ class PMap(PBase):
         return PMap(source, pmer) 
 
     def sink_tsv(self, path):
-        return self.map(lambda x: u'\t'.join(str(p) for p in x)).sink(path)
+        return self.map(lambda x: u'\t'.join(unicode(p) for p in x)).sink(path)
 
     def sink_json(self, path):
         return self.map(json.dumps).sink(path)
