@@ -269,12 +269,12 @@ class PJoin(PBase):
     def run(self, name=None, **kwargs):
         return self.reduce(lambda l, r: (list(l), list(r))).run(name, **kwargs)
 
-    def reduce(self, aggregate):
+    def reduce(self, aggregate, many=False):
         def _reduce(k, left, right):
             return aggregate(left, right)
 
         source, pmer = self.pmer._add_reducer([self.source, self.right], 
-                KeyedInnerJoin(_reduce))
+                KeyedInnerJoin(_reduce, many))
         return PMap(source, pmer)
 
     def left_reduce(self, aggregate):

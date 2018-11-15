@@ -88,8 +88,9 @@ class KeyedReduce(Reduce):
             yield k, (k, v)
 
 class InnerJoin(Reducer):
-    def __init__(self, joiner_f):
+    def __init__(self, joiner_f, many=False):
         self.joiner_f = joiner_f
+        self.many = many
 
     def reduce(self, *datasets):
         assert len(datasets) == 2
@@ -103,7 +104,13 @@ class InnerJoin(Reducer):
                 right = next(g2, None)
             else:
                 k = left[0]
-                yield k, self.joiner_f(k, left[1], right[1])
+                it = self.joiner_f(k, left[1], right[1])
+                if not self.many:
+                    it = [it]
+
+                for nv in it:
+                    yield k, nv
+
                 left, right = next(g1, None), next(g2, None)
 
 class KeyedInnerJoin(InnerJoin):

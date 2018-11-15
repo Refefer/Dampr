@@ -123,6 +123,27 @@ class PolymrTest(unittest.TestCase):
         self.assertEquals([10,12,14,16,18], list(even_ve))
         self.assertEquals([11,13,15,17,19], list(odd_ve))
 
+    def test_reduce_many(self):
+        even = self.items.filter(lambda x: x % 2 == 0)
+        odd  = self.items.filter(lambda x: x % 2 == 1)
+
+        def cross(x, y):
+            y = list(y)
+            for xi in x:
+                for yi in y:
+                    yield xi * yi
+
+        results = even.group_by(lambda x: 1) \
+            .join(odd.group_by(lambda x: 1)) \
+                .reduce(cross, many=True) \
+            .run().read()
+
+        results = sorted(results)
+        e = [10,12,14,16,18]
+        o = [11,13,15,17,19]
+        expected = sorted([(1, ei * oi) for ei in e for oi in o])
+        self.assertEquals(results, expected)
+
     def test_fold_by(self):
         output = self.items \
                 .fold_by(lambda x: 1, 
