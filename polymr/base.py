@@ -28,14 +28,23 @@ class MapCrossJoin(Mapper):
     """
     Standard Mapper
     """
-    def __init__(self, crosser):
+    def __init__(self, crosser, cache):
         self.crosser = crosser 
+        self.cache = cache
 
     def map(self, *datasets):
         assert len(datasets) == 2
         left, right = [self.group_datasets(d) for d in datasets]
+
+        # Cache the results
+        if self.cache:
+            cached = list(right.read())
+            read_right = lambda: iter(cached)
+        else:
+            read_right = right.read
+
         for key, value in left.read():
-            for key2, value2 in right.read():
+            for key2, value2 in read_right():
                 for k3, v3 in self.crosser(key, value, key2, value2):
                     yield k3, v3
 

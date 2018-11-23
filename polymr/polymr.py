@@ -1,3 +1,11 @@
+"""
+Polymr is a light-weight MapReduce library for single machine computation.  It supports a number of 
+useful features such as map and reduce side joins, associative reduces, 
+aggregations, multiprocessing, and more.
+
+While the underlying engine uses MapReduce, Polymr is best utilized via it's DSL which provides
+higher level functionality for complex workflows.
+"""
 import itertools
 import sys
 import operator
@@ -11,14 +19,25 @@ from .runner import MTRunner, Graph, Source
 from .dataset import MemoryInput, DirectoryInput, TextInput, Chunker
 
 class ValueEmitter(object):
+    """
+    Reads values from a processed dataset.  Can be used on the shell
+    to read the results of a computation.
+    """
     def __init__(self, datasets):
         self.datasets = datasets
 
     def stream(self):
+        """
+        Streams the values in the dataset.
+        """
         for _, v in self.datasets.read():
             yield v
 
     def read(self, k=None):
+        """
+        Reads the first k items from the dataset.  If k is None, reads the
+        entire dataset.
+        """
         if k is None:
             return list(self.stream())
 
@@ -28,15 +47,27 @@ class ValueEmitter(object):
         return self.stream()
 
     def delete(self):
+        """
+        Deletes the cached on-disk dataset.
+        """
         self.datasets.delete()
 
 class PBase(object):
+    """
+    Base Polymr class
+    """
     def __init__(self, source, pmer):
         assert isinstance(source, Source)
         self.source = source
         self.pmer = pmer
 
     def run(self, name=None, **kwargs):
+        """
+        Evaluates the composed Polymr graph with the provided name and subsequent options.
+        By default, uses /tmp as temporary storage.
+
+        Returns a ValueEmitter useful for shell access.
+        """
         if name is None:
             name = 'polymr/{}'.format(random.random())
 
@@ -45,18 +76,30 @@ class PBase(object):
         return ValueEmitter(ds[0])
 
     def read(self, k=None, **kwargs):
+        """
+        Shorthand for run() followed by a read()
+        """
         return self.run(**kwargs).read(k)
 
 def _identity(k, v):
     yield k, v
 
 class PMap(PBase):
+    """
+    Represents most mapping processes.  Internally, it collects consecutive mapping operations
+    and fuses them together into a single operation, speeding up many types of operations.
+
+    This class shouldn't be intialized manually.
+    """
 
     def __init__(self, source, pmer, agg=None):
         super(PMap, self).__init__(source, pmer)
         self.agg = [] if agg is None else agg
 
     def run(self, name=None, **kwargs):
+        """
+        Run the defined graph.
+        """
         if len(self.agg) > 0:
             return self.checkpoint().run(name, **kwargs)
         else:
@@ -66,6 +109,13 @@ class PMap(PBase):
         return PMap(self.source, self.pmer, self.agg + [Map(f)])
 
     def sample(self, prob):
+        """
+        Samples data with a given probability.  For example:
+        
+        graph.sample(0.1) will uniformly sample 10% of the data in the collection.
+        """
+        assert 0 <= prop <= 1.0
+
         def _sample(k, v):
             if get_rand().random() < prob:
                 yield k, v
@@ -73,6 +123,20 @@ class PMap(PBase):
         return self._add_map(_sample)
         
     def checkpoint(self, force=False, combiner=None, options=None):
+        """
+        Checkpoint forces Polymr to fuse all cached maps and add it as a MR stage.
+
+        This is useful when sharing the results of a computation with multiple other graphs.
+        
+        Without checkpoint(), Polymr would execute the shared graph multiple times rather than reuse
+        the results of the computation:
+
+        ```
+        >>> evens = Polymr.memory([1,2,3,4,5]).filter(lambda x: x % 2 == 0).checkpoint()
+        >>> summed = evens.group_by(lambda x: 1).sum()
+        >>> multiplied = evens.group_by(lambda x: 1).reduce(lambda x, y: x * y)
+        ```
+        """
         if len(self.agg) > 0 or force:
             aggs = [Map(_identity)] if len(self.agg) == 0 else self.agg[:]
             name = ' -> ' .join('{}'.format(a.mapper.__name__) for a in aggs)
@@ -87,12 +151,28 @@ class PMap(PBase):
         return self
 
     def map(self, f):
+        """
+        Maps elements in the underlying collection using function f:
+
+        ```
+        >>> Polymr.memory([1,2,3,4,5]).map(lambda x: x + 1).read()
+        [2, 3, 4, 5, 6]
+        ```
+        """
         def _map(k, v):
             yield k, f(v)
 
         return self._add_map(_map)
 
     def filter(self, f):
+        """
+        Filters items from a collection based on a predicate f:
+
+        ```
+        >>> Polymr.memory([1,2,3,4,5]).filter(lambda x: x % 2 == 1).read()
+        [1, 3, 5]
+        ```
+        """
         def _filter(k, v):
             if f(v):
                 yield k, v
@@ -100,6 +180,13 @@ class PMap(PBase):
         return self._add_map(_filter)
 
     def flat_map(self, f):
+        """
+        Maps elements in the underlying collection using function f, flattening the results:
+        ```
+        >>> Polymr.memory([1,2,3,4,5]).flat_map(range).read()
+        [0, 0, 1, 0, 1, 2, 0, 1, 2, 3, 0, 1, 2, 3, 4]
+        ```
+        """
         def _flat_map(k, v):
             for vi in f(v):
                 yield k, vi
@@ -107,6 +194,15 @@ class PMap(PBase):
         return self._add_map(_flat_map)
 
     def group_by(self, key, vf=lambda x: x):
+        """
+        Groups a collections of X by a key function, optionally mapping X to Y 
+        using `vf`.  Returns a Reducer object for different types of aggregations
+
+        ```
+        >>> Polymr.memory([1,2,3,4,5]).group_by(lambda x: x % 2).reduce(lambda k, it: sum(it)).read()
+        [(0, 6), (1, 9)]
+        ```
+        """
         def _group_by(_key, value):
             yield key(value), vf(value)
 
@@ -114,6 +210,19 @@ class PMap(PBase):
         return PReduce(pm.source, pm.pmer)
 
     def a_group_by(self, key, vf=lambda x: x):
+        """
+        Groups a collection of X by a key function and optionally mapping X to Y
+        using `vf`.  It differs from `group_by` by requiring an associative reduction
+        operator: by forcing this restriction, Polymr is able to perform a partial 
+        reduction of the collection during the mapping sequence which can dramatically
+        speed up the performace of the reduce stage.
+
+        When possible, use a_group_by over the more general group_by
+        ```
+        >>> Polymr.memory([1,2,3,4,5]).a_group_by(lambda x: x % 2).reduce(lambda x, y: x+y).read()
+        [(0, 6), (1, 9)]
+        ```
+        """
         def _a_group_by(_key, value):
             yield key(value), vf(value)
 
@@ -122,15 +231,32 @@ class PMap(PBase):
         return ARReduce(pm)
 
     def fold_by(self, key, binop, value=lambda x: x, **options):
+        """
+        Shortcut for a_group_by(key, value).reduce(binop)
+        """
         return self.a_group_by(key, value).reduce(binop, **options)
 
     def sort_by(self, key, **options):
+        """
+        Sorts the results by a given key function.
+        
+        ```
+        Polymr.memory([1,2,3,4,5]).filter(lambda x: x % 2 == 1).sort_by(lambda x: -x).read()
+        [5, 3, 1]
+        ```
+        """
         def _sort_by(_key, value):
             yield key(value), value
 
         return self._add_map(_sort_by).checkpoint(options=options)
 
     def join(self, other):
+        """
+        Joins two independent computations, returning a Joining class.
+
+        This is a powerful and expensive operation which can merge two Polymr 
+        collections together.
+        """
         assert isinstance(other, PBase)
         me = self.checkpoint(True)
         if isinstance(other, PMap):
@@ -140,10 +266,28 @@ class PMap(PBase):
         return PJoin(me.source, pmer, other.source)
 
     def count(self, key=lambda x: x, **options):
+        """
+        Counts each item X in the collection by its key function:
+
+        ```
+        >>> Polymr.memory([1,2,3,4,5]).count(lambda x: x % 2).read()
+        [(0, 2), (1, 3)]
+        ```
+        """
         return self.a_group_by(key, lambda v: 1) \
                 .reduce(operator.add, **options)
 
     def mean(self, key=lambda x: 1, value=lambda x: x, **options):
+        """
+        Finds the mean of X, grouped by its key function and optionally
+        mapped by a value function:
+
+        ```
+        >>> ages = [("Andrew", 33), ("Alice", 42), ("Andrew", 12), ("Bob", 51)]
+        >>> Polymr.memory(ages).mean(lambda x: x[0], lambda v: v[1]).read()
+        [('Alice', 42.0), ('Andrew', 22.5), ('Bob', 51.0)]
+        ```
+        """
         def _binop(x, y):
             return x[0] + y[0], x[1] + y[1]
 
@@ -152,6 +296,11 @@ class PMap(PBase):
                 .map(lambda x: (x[0], x[1][0] / float(x[1][1])))
 
     def inspect(self, prefix="", exit=False):
+        """
+        Inspect is a debug function which prints each item X that flows through
+        it.  It's valueable in inspecting intermediate results of a pipeline 
+        without changing the values internally.
+        """
         def _inspect(k, v):
             print("{}: {}".format(prefix, v))
             yield k, v
@@ -164,11 +313,38 @@ class PMap(PBase):
         return ins
 
     def cached(self, **options):
+        """
+        The cached function runs a graph and stores it in memory.  This is 
+        useful for small datasets to gain extra performance in subsequent 
+        computations.
+
+        ```
+        >>> Polymr.memory([1,2,3,4,5,6]).mean(lambda x: x % 2).cached().read()
+        [(0, 4.0), (1, 3.0)]
+        ```
+        """
         # Run the pipeline, load it into memory, and create a new graph
         options['memory'] = True
         return self.checkpoint(options=options)
 
     def sink(self, path):
+        """
+        Since writes each X in a collection to a given path.  The path will
+        create a directory and write each map or reduce partition into the
+        directory as partitions.
+
+        Sink assumes each X in the collection is already a unicode string.
+
+        ```
+        >>> Polymr.memory(["foo", "bar", "baz"]).sink("/tmp/foo").run()
+        >>> open("/tmp/foo/0").read()
+        'foo\n'
+        >>> open("/tmp/foo/1").read()
+        'bar\n'
+        >>> open("/tmp/foo/2").read()
+        'baz\n'
+        ```
+        """
         aggs = [Map(_identity)] if len(self.agg) == 0 else self.agg[:]
         name = ' -> ' .join('{}'.format(a.mapper.__name__) for a in aggs)
         name = 'Stage {}: %s => %s' % (self.source, name)
@@ -180,37 +356,101 @@ class PMap(PBase):
         return PMap(source, pmer) 
 
     def sink_tsv(self, path):
+        """
+        A convenience function which takes a tuple or list, creates a simple
+        tab-delimited output, and sinks it to the provided path:
+
+        ```
+        >>> Polymr.memory([("Hank Aaron", 755)]).sink_tsv("/tmp/foo").run()
+        >>> open("/tmp/foo/0").read()
+        'Hank Aaron\t755\n'
+        ```
+        """
         return self.map(lambda x: u'\t'.join(unicode(p) for p in x)).sink(path)
 
     def sink_json(self, path):
+        """
+        A convenience function which takes a simple python object and serializes
+        it to a line-delimited json to the given path:
+
+        ```
+        >>> Polymr.memory([{"name": "Hank Aaron", "home runs": 755}]).sink_json("/tmp/foo").run()
+        >>> open("/tmp/foo/0").read()
+        '{"home runs": 755, "name": "Hank Aaron"}\n'
+        ```
+        """
         return self.map(json.dumps).sink(path)
 
     def cross_tiny_right(self, other, cross):
+        """
+        Produces the cross product between two datasets during the map stage.
+
+        This is an incredibly expensive operation when done against two large
+        datasets.  cross_tiny_right attempts to speed up the operation by caching
+        the right dataset in memory.
+
+        Two items, Xi and Yi, are joined with the cross function.
+
+        ```
+        >>> left = Polymr.memory([1,2,3,4,5])
+        >>> right = Polymr.memory(['foo', 'bar'])
+        >>> left.cross_tiny_right(right, lambda x, y: (x, y)).read()
+        [(1, 'foo'), (1, 'bar'), (2, 'foo'), (2, 'bar'), (3, 'foo'), (3, 'bar'), (4, 'foo'), (4, 'bar'), (5, 'foo'), (5, 'bar')]
+        ```
+        """
         assert isinstance(other, PMap)
-        return other.cross_tiny_left(self, cross)
+        return other.cross_tiny_left(self, lambda xi, yi: cross(yi, xi))
 
     def cross_tiny_left(self, other, cross, **options):
+        """
+        Produces the cross product between two datasets during the map stage.
+
+        This is an incredibly expensive operation when done against two large
+        datasets.  cross_tiny_right attempts to speed up the operation by caching
+        the right dataset in memory.
+
+        Two items, Xi and Yi, are joined with the cross function.
+
+        ```
+        >>> left = Polymr.memory([1,2,3,4,5])
+        >>> right = Polymr.memory(['foo', 'bar'])
+        >>> left.cross_tiny_left(right, lambda x, y: (x, y)).read()
+        [(1, 'foo'), (2, 'foo'), (3, 'foo'), (4, 'foo'), (5, 'foo'), (1, 'bar'), (2, 'bar'), (3, 'bar'), (4, 'bar'), (5, 'bar')]
+        ```
+        """
         def _cross(k1, v1, k2, v2):
-            yield k1, cross(v1, v2)
+            yield k1, cross(v2, v1)
 
         pmer = self.checkpoint()
         other = other.checkpoint()
         pmer = Polymr(self.pmer.graph.union(other.pmer.graph))
         name = 'Stage {}: (%s X %s)' % (self.source, other.source)
         source, pmer = pmer._add_mapper([other.source, self.source], 
-                MapCrossJoin(_cross), 
+                MapCrossJoin(_cross, cache=True), 
                 combiner=None,
                 name=name,
                 options=options)
         return PMap(source, pmer) 
 
-        #return other.cross_tiny_right(self, cross, partitions)
-
 class ARReduce(object):
+    """
+    Associative Reducer operators.
+    """
     def __init__(self, pmap):
         self.pmap = pmap
 
     def reduce(self, binop, reduce_buffer=1000, **options):
+        """
+        Reduces a grouped dataset by an associative binary operator.
+        This will do a partial reduce in the map stage, completing the reduction
+        in the reduce stage.  It is often substantially faster than the more
+        general group_by.
+
+        ``
+        >>> Polymr.memory([1,2,3,4,5]).a_group_by(lambda x: 1).reduce(lambda x, y: x + y).read()
+        [(1, 15)]
+        ```
+        """
         def _reduce(key, vs):
             acc = next(vs)
             for v in vs:
@@ -227,6 +467,15 @@ class ARReduce(object):
         return PReduce(pm.source, pm.pmer).reduce(_reduce)
     
     def first(self, **options):
+        """
+        Returns the first item found for a given key.  Can also be called
+        `unique`.
+
+        ```
+        >>> Polymr.memory([1,2,3,4,5]).a_group_by(lambda x: x % 2).first().read()
+        [(0, 2), (1, 1)]
+        ```
+        """
         return self.reduce(lambda x, _y: x, **options)
 
     def sum(self, **options):
