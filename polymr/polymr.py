@@ -131,11 +131,10 @@ class PMap(PBase):
         Without checkpoint(), Polymr would execute the shared graph multiple times rather than reuse
         the results of the computation:
 
-        ```
-        >>> evens = Polymr.memory([1,2,3,4,5]).filter(lambda x: x % 2 == 0).checkpoint()
-        >>> summed = evens.group_by(lambda x: 1).sum()
-        >>> multiplied = evens.group_by(lambda x: 1).reduce(lambda x, y: x * y)
-        ```
+            >>> evens = Polymr.memory([1,2,3,4,5]).filter(lambda x: x % 2 == 0).checkpoint()
+            >>> summed = evens.group_by(lambda x: 1).sum()
+            >>> multiplied = evens.group_by(lambda x: 1).reduce(lambda x, y: x * y)
+
         """
         if len(self.agg) > 0 or force:
             aggs = [Map(_identity)] if len(self.agg) == 0 else self.agg[:]
