@@ -26,7 +26,7 @@ def main(fname):
     word_lengths = top_words \
             .fold_by(lambda tc: len(tc[0]), 
                     value=lambda tc: tc[1], 
-                    binop=lambda x,y: x+y)
+                    binop=lambda x,y: x+y) \
             .sort_by(lambda cl: cl[0])
 
     # Average character length
@@ -47,10 +47,12 @@ def main(fname):
     print("Total Words Found: ", tc.read(1)[0][1])
 
     print("\nTop 10 words")
+    print("\n************")
     for word, count in tw.read(10):
         print(word, count)
 
     print("\nCharacter histogram")
+    print("\n*******************")
     for cl, length in wl.read(20):
         print(cl, length)
 
