@@ -114,7 +114,7 @@ class PMap(PBase):
         
         graph.sample(0.1) will uniformly sample 10% of the data in the collection.
         """
-        assert 0 <= prop <= 1.0
+        assert 0 <= prob <= 1.0
 
         def _sample(k, v):
             if get_rand().random() < prob:
@@ -468,9 +468,7 @@ class ARReduce(object):
     
     def first(self, **options):
         """
-        Returns the first item found for a given key.  Can also be called
-        `unique`.
-
+        Returns the first item found for a given key. 
         ```
         >>> Polymr.memory([1,2,3,4,5]).a_group_by(lambda x: x % 2).first().read()
         [(0, 2), (1, 1)]
@@ -479,15 +477,44 @@ class ARReduce(object):
         return self.reduce(lambda x, _y: x, **options)
 
     def sum(self, **options):
+        """
+        Simple sum of values by key.
+
+        ```
+        >>> Polymr.memory([1,2,3,4,5]).a_group_by(lambda x: x % 2).sum().read()
+        [(0, 6), (1, 9)]
+        ```
+        """
         return self.reduce(lambda x, y: x + y, **options)
 
 class PReduce(PBase):
+    """
+    A more general reduce class.
+    """
 
     def reduce(self, f):
+        """
+        Reduces a grouped set of items by f, which takes two arguments: the group key
+        and an iterator lazily yield all items in the group.
+
+        ```
+        >>> Polymr.memory([1,2,3,4,5]).group_by(lambda x: x % 2).reduce(lambda k, it: sum(it)).read()
+        [(0, 6), (1, 9)]
+        ```
+        """
         new_source, pmer = self.pmer._add_reducer([self.source], KeyedReduce(f))
         return PMap(new_source, pmer)
 
     def unique(self, key=lambda x: x):
+        """
+        Returns the unique set of items in the grouping.
+
+        ```
+        >>> names = [("Andrew", 1), ("Andrew", 1), ("Andrew", 2), ("Becky", 13)]
+        >>> Polymr.memory(names).group_by(lambda x: x[0], lambda x: x[1]).unique().read()
+        [('Andrew', [1, 2]), ('Becky', [13])]
+        ```
+        """
         def _uniq(k, it):
             seen = set()
             agg = []
@@ -502,6 +529,9 @@ class PReduce(PBase):
         return self.reduce(_uniq)
 
     def join(self, other):
+        """
+        Performs a join between two datasets on a given key, returning a PJoin object.
+        """
         assert isinstance(other, PBase)
         if isinstance(other, PMap):
             other = other.checkpoint(True)
@@ -510,6 +540,9 @@ class PReduce(PBase):
         return PJoin(self.source, pmer, other.source)
 
 class PJoin(PBase):
+    """
+    Performs different types of joins between two grouped datasets.
+    """
 
     def __init__(self, source, pmer, right):
         super(PJoin, self).__init__(source, pmer)
@@ -519,6 +552,16 @@ class PJoin(PBase):
         return self.reduce(lambda l, r: (list(l), list(r))).run(name, **kwargs)
 
     def reduce(self, aggregate, many=False):
+        """
+        Performs an inner join between two datasets.
+
+        ```
+        >>> left = Polymr.memory([("foo", 13), ("bar", 14)]).group_by(lambda x: x[0])
+        >>> right = Polymr.memory([("bar", "baller"), ("baz", "bag")]).group_by(lambda x: x[0])
+        >>> left.join(right).reduce(lambda lit, rit: (list(lit), list(rit))).read()
+        [('bar', ([('bar', 14)], [('bar', 'baller')]))]
+        ```
+        """
         def _reduce(k, left, right):
             return aggregate(left, right)
 
@@ -527,6 +570,18 @@ class PJoin(PBase):
         return PMap(source, pmer)
 
     def left_reduce(self, aggregate):
+        """
+        Performs a left join on two datasets.  In the case where the right dataset
+        is missing the join key, it will call the aggregate function with an empty
+        iterator.
+
+        ```
+        >>> left = Polymr.memory([("foo", 13), ("bar", 14)]).group_by(lambda x: x[0])
+        >>> right = Polymr.memory([("bar", "baller"), ("baz", "bag")]).group_by(lambda x: x[0])
+        >>> left.join(right).left_reduce(lambda lit, rit: (list(lit), list(rit))).read()
+        [('bar', ([('bar', 14)], [('bar', 'baller')])), ('foo', ([('foo', 13)], []))]
+        ```
+        """
         def _reduce(k, left, right):
             return aggregate(left, right)
 
@@ -544,6 +599,9 @@ class PJoin(PBase):
         return PMap(source, pmer).map(lambda x: x[1])
 
 class Polymr(object):
+    """
+    Entrypoint into the Polymr processing functions.
+    """
     def __init__(self, graph=None, runner=None):
         if graph is None:
             graph = Graph()
@@ -556,12 +614,35 @@ class Polymr(object):
 
     @classmethod
     def memory(cls, items, partitions=50):
+        """
+        Create an in-memory dataset from the provided items.  `partitions` define how
+        many initial functions there will be.
+
+        ```
+        >>> Polymr.memory([1,2,3,4,5])
+        ```
+        """
         mi = MemoryInput(list(enumerate(items)), partitions)
         source, ng = Graph().add_input(mi)
         return PMap(source, Polymr(ng))
 
     @classmethod
     def text(cls, fname, chunk_size=16*1024**2):
+        """
+        Reads a file or directory of files into Polymr.  Each record is assumed to 
+        be newline delimited.  
+
+        When fname is a directory, it will walk the directory, collecting all
+        files within it as part of the collection.
+        
+        `chunk_size` describes how big each map portion will be.
+
+        Returns a PMap object.
+
+        ```
+        >>> Polymr.text('/tmp', chunk_size=64*1024**2)
+        ```
+        """
         if os.path.isdir(fname):
             inp = DirectoryInput(fname, chunk_size)
         else:
@@ -572,16 +653,36 @@ class Polymr(object):
 
     @classmethod
     def json(cls, *args, **kwargs):
+        """
+        Convenience function which reads newline-delimited json records.
+        """
         return cls.text(*args, **kwargs).map(json.loads)
 
     @classmethod
     def from_dataset(cls, dataset):
+        """
+        Typically not used, this will read the raw outputs of a Polymr stage 
+        as an input.
+        """
         assert isinstance(dataset, Chunker)
         source, ng = Graph().add_input(dataset)
         return PMap(source, Polymr(ng))
 
     @classmethod
     def run(self, *pmers, **kwargs):
+        """
+        Runs a graph or set of graphs.
+
+        ```
+        >>> foo = Polymr.memory([1,2,3,4,5])
+        >>> bar = Polymr.memory([6,7,8,9,10])
+        >>> left, right = Polymr.run(foo, bar)
+        >>> left.read()
+        [1, 2, 3, 4, 5]
+        >>> right.read()
+        [6, 7, 8, 9, 10]
+        ```
+        """
         sources = []
         graph = None
         for i, pmer in enumerate(pmers):
