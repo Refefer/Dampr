@@ -24,9 +24,62 @@ class Map(Mapper):
             for k2, v2 in self.mapper(key, value):
                 yield k2, v2
 
+class BlockMapper(Mapper):
+    """
+    Custom BlockMapper.  User's can specify how a Mapper instance can
+    consume a stream of key-values, allowing for custom logic.
+    """
+    
+    def start(self):
+        """
+        Sets up instance variables for when a Mapper begins consumption of 
+        a Map Block.
+        """
+        pass
+
+    def add(self, key, value):
+        """
+        Logic for how to handle new key-value pairs.  This function is required
+        to return an iterator regardless of whether it yields data: this gives
+        a more flexible definition.
+        """
+        raise NotImplementedError()
+
+    def finish(self):
+        """
+        Mapping is finished.  In the case of aggregations, this should yield out
+        all remaining key-values for Polymr to consume.
+        """
+        return ()
+
+    def map(self, *datasets):
+        assert len(datasets) == 1
+        self.start()
+        for key, value in datasets[0].read():
+            for out in self.add(key, value):
+                yield out
+
+        for out in self.finish():
+            yield out
+
+class StreamMapper(Mapper):
+    """
+    Simple generator based block mapper.
+    """
+
+    def __init__(self, streamer_f):
+        self.streamer_f = streamer_f
+    
+    def map(self, *datasets):
+        assert len(datasets) == 1
+        it = (v for _k, v in datasets[0].read())
+        return self.streamer_f(it)
+
 class MapCrossJoin(Mapper):
     """
-    Standard Mapper
+    Cross products two datasets.  If `cache` is True, will load up the
+    right dataset into memory instead of streaming multiple times from
+    disk.
     """
     def __init__(self, crosser, cache):
         self.crosser = crosser 
@@ -90,6 +143,43 @@ class Reduce(Reducer):
         assert len(datasets) == 1
         for k, vs in self.yield_groups(datasets[0]):
             yield k, self.reducer(k, vs)
+
+class BlockReducer(Reducer):
+    """
+    Custom BlockReducer.  User's can specify how a Reducer instance can
+    consume a stream of key-valueiters, allowing for custom logic.
+    """
+    def start(self):
+        pass 
+
+    def add(self, k, it):
+        raise NotImplementedError()
+
+    def finish(self):
+        return ()
+
+    def reduce(self, *datasets):
+        assert len(datasets) == 1
+        self.start()
+        for k, vs in self.yield_groups(datasets[0]):
+            for nk, nv in self.add(k, vs):
+                yield nk, nv
+
+        for nk, nv in self.finish():
+            yield nk, nv
+
+class StreamReducer(Reducer):
+    """
+    Custom BlockReducer.  User's can specify how a Reducer instance can
+    consume a stream of key-valueiters, allowing for custom logic.
+    """
+    def __init__(self, stream_f):
+        self.stream_f = stream_f
+
+    def reduce(self, *datasets):
+        assert len(datasets) == 1
+        for nk, nv in self.stream_f(self.yield_groups(datasets[0])):
+            yield nk, (nk, nv)
 
 class KeyedReduce(Reduce):
     def reduce(self, *datasets):

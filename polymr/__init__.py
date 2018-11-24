@@ -9,8 +9,17 @@ best utilized via it's DSL which provides higher level functionality for complex
 
 It loosely attempts to replicate interfaces such as Spark or Scalding for ease of pickup.
 """
+import logging
 from .polymr import Polymr, PMap, PReduce, PJoin, ARReduce
+from .base import BlockMapper, BlockReducer
 
 
-__all__ = ["Polymr", "PMap", "PReduce", "PJoin", "ARReduce"]
+__all__ = ["Polymr", "PMap", "PReduce", "PJoin", "ARReduce", "BlockMapper", "BlockReducer"]
 
+
+def setup_logging(loglevel=logging.DEBUG):
+    """
+    Convenience function for enabling logging
+    """
+    logging.basicConfig(level=loglevel,
+                        format='%(asctime)s %(levelname)s %(message)s')

@@ -141,6 +141,87 @@ class PMap(PBase):
 
         return self
 
+    def custom_mapper(self, mapper, name=None, **options):
+        """
+        Custom Mapper provides a low-level interface to the underlying map function.
+        Users can provide any instance which adhere's to the Mapper interface, allowing
+        for powerful or specific implementations.
+
+        This is typically used very rarely and has some caveats such as not fusing
+        with other Mappers.  Similarly, the implementer needs to understand more of the
+        nuances associated with keys.
+
+            >>> from polymr.base import Map
+            >>> Polymr.memory([1,2,3,4,5]).custom_mapper(Map(lambda k, x: [(k, x+1)])).read()
+            [2, 3, 4, 5, 6]
+        """
+        assert isinstance(mapper, Mapper)
+        name = name if name is not None else str(mapper)
+        me = self.checkpoint()
+        source, pmer = self.pmer._add_mapper([me.source], 
+                mapper,
+                name=name,
+                options=options)
+        
+        return PMap(source, pmer)
+
+    def custom_reducer(self, reducer, name=None, **options):
+        """
+        Allows the user to provide any Reducer which adheres to the Reducer interface.
+        This is a very powerful, low-level interface which should be avoided when possible
+        as it's easy to write bugs.
+
+            >>> Polymr.memory([1,2,3,4,5]).custom_reducer(Reduce(lambda k, x: [(k, sum(x))])).read()
+            [[(0, 1)], [(1, 2)], [(2, 3)], [(3, 4)], [(4, 5)]]
+        """
+        assert isinstance(reducer, Reducer)
+        me = self.checkpoint(force=True)
+        name = name if name is not None else str(reducer)
+        new_source, pmer = me.pmer._add_reducer([me.source], 
+                reducer, 
+                name=name,
+                options=options)
+        
+        return PMap(new_source, pmer)
+
+    def partition_map(self, f, **options):
+        """
+        Provides a medium-level interface for writing custom functionality for mapping 
+        a partition.  This can be used for creating custom logic in mappers for the sake
+        of performance or additional functionality.
+
+        `f` is a function that takes in an iterator of items in the partition and yields 
+        out group keys and new values.
+
+
+            >>> def plus_one(items):
+            ...   for num in items:
+            ...     yield num, num + 1
+            ...
+            >>> Polymr.memory([1,2,3,4,5]).partition_map(plus_one).read()
+            [2, 3, 4, 5, 6]
+
+        """
+        return self.custom_mapper(StreamMapper(f), **options)
+
+    def partition_reduce(self, f):
+        """
+        `partition_reduce` is a medium-level function that allows for more complex logic
+        during reductions.  It can be useful in certain cases where reductions over sets
+        of reduced values is convenient, such as returning only the top K items in a dataset
+
+            >>> def largest_number(it):
+            ...   largest = float('-inf')
+            ...   for group_key, its in it:
+            ...     for value in its:
+            ...       largest = max(largest, value)
+            ...   yield "Largest", largest
+            ...
+            >>> Polymr.memory([1,2,3,4,5]).partition_reduce(largest_number).read(n_partitions=1)
+            [('Largest', 5)]
+        """
+        return self.custom_reducer(StreamReducer(f))
+
     def map(self, f):
         """
         Maps elements in the underlying collection using function 
@@ -415,6 +496,13 @@ class ARReduce(object):
         in the reduce stage.  It is often substantially faster than the more
         general group_by.
 
+        `reduce_buffer` is a constant which tells Polymr how much temporary storage
+        to keep in memory on the map side reductions.  For example with `1000`, Polymr
+        will keep 1000 unique keys in memory.  In the case where a new key would spill
+        over the buffer size, Polymr will flush the buffer to disk and create a new
+        buffer.  By increasing the `reduce_buffer`, you can increase efficiency while
+        sacrificing memory.
+
             >>> Polymr.memory([1,2,3,4,5]).a_group_by(lambda x: 1).reduce(lambda x, y: x + y).read()
             [(1, 15)]
         """
@@ -450,6 +538,7 @@ class ARReduce(object):
         """
         return self.reduce(lambda x, y: x + y, **options)
 
+    
 class PReduce(PBase):
     """
     A more general reduce class.
@@ -497,6 +586,19 @@ class PReduce(PBase):
 
         pmer = Polymr(self.pmer.graph.union(other.pmer.graph))
         return PJoin(self.source, pmer, other.source)
+
+    def partition_reduce(self, f):
+        """
+        Provides medium-level functionality for partition reductions.  See 
+        PMap.partition_reduce for more details.
+        """
+        reducer = StreamReducer(f)
+        name = str(reducer)
+        new_source, pmer = me.pmer._add_reducer([self.pm.source], 
+                reducer, 
+                name=name)
+
+        return PMap(new_source, pmer)
 
 class PJoin(PBase):
     """

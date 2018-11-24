@@ -2,7 +2,7 @@ import shutil
 import itertools
 import unittest
 
-from polymr import Polymr
+from polymr import Polymr, BlockMapper, BlockReducer
 
 class PolymrTest(unittest.TestCase):
 
@@ -221,6 +221,79 @@ class PolymrTest(unittest.TestCase):
         results = sorted(list(output.run()))
         expected = sorted([i * k for i in range(10, 20) for k in range(10, 20)])
         self.assertEquals(expected, results)
+
+    def test_blocks(self):
+        """
+        Tests Custom Blocks
+        """
+        from collections import defaultdict
+        import heapq
+        class TopKMapper(BlockMapper):
+            def __init__(self, k):
+                self.k = k
+
+            def start(self):
+                self.heap = []
+
+            def add(self, _k, lc):
+                heapq.heappush(self.heap, (lc[1], lc[0]))
+                if len(self.heap) > self.k:
+                    heapq.heappop(self.heap)
+
+                return iter([])
+
+            def finish(self):
+                for cl in self.heap:
+                    yield 1, cl
+
+        class TopKReducer(BlockReducer):
+            def __init__(self, k):
+                self.k = k
+
+            def start(self):
+                pass
+
+            def add(self, k, it):
+                for count, letter in heapq.nlargest(self.k, it):
+                    yield letter, (letter, count)
+
+        word = Polymr.memory(["supercalifragilisticexpialidociousa"])
+        letter_counts = word.flat_map(lambda w: list(w)).count()
+
+        topk = letter_counts \
+                .custom_mapper(TopKMapper(2)) \
+                .custom_reducer(TopKReducer(2))
+        results = sorted(list(topk.run()))
+        self.assertEquals(results, [('a', 4), ('i', 7)])
+
+    def test_stream_blocks(self):
+        """
+        Tests stream blocks
+        """
+        import heapq
+        def map_topk(it):
+            heap = []
+            for symbol, count in it:
+                heapq.heappush(heap, (count, symbol))
+                if len(heap) > 2:
+                    heapq.heappop(heap)
+
+            return ((1, x) for x in heap)
+
+        def reduce_topk(it):
+            counts = (v for k, vit in it for v in vit)
+            for count, symbol in heapq.nlargest(2, counts):
+                yield symbol, count
+
+        word = Polymr.memory(["supercalifragilisticexpialidociousa"])
+        letter_counts = word.flat_map(lambda w: list(w)).count()
+
+        topk = letter_counts \
+                .partition_map(map_topk) \
+                .partition_reduce(reduce_topk)
+        results = sorted(list(topk.run()))
+        self.assertEquals(results, [('a', 4), ('i', 7)])
+
 
 if __name__ == '__main__':
     unittest.main()
