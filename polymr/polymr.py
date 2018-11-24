@@ -1,12 +1,3 @@
-"""
-Polymr is a light-weight MapReduce library for single machine computation.  It supports a number of 
-useful features such as map and reduce side joins, associative reduces, 
-aggregations, multiprocessing, and more.
-
-While the underlying engine uses MapReduce, Polymr is best utilized via it's DSL which provides
-higher level functionality for complex workflows.
-
-"""
 import itertools
 import sys
 import operator
@@ -279,12 +270,15 @@ class PMap(PBase):
             >>> Polymr.memory(ages).mean(lambda x: x[0], lambda v: v[1]).read()
             [('Alice', 42.0), ('Andrew', 22.5), ('Bob', 51.0)]
         """
-        def _binop(x, y):
+        def _mean_binop(x, y):
             return x[0] + y[0], x[1] + y[1]
 
+        def _average(x):
+            return (x[0], x[1][0] / float(x[1][1]))
+
         return self.a_group_by(key, lambda v: (value(v), 1)) \
-                .reduce(_binop, **options) \
-                .map(lambda x: (x[0], x[1][0] / float(x[1][1])))
+                .reduce(_mean_binop, **options) \
+                .map(_average)
 
     def inspect(self, prefix="", exit=False):
         """
@@ -681,15 +675,24 @@ def fuse(aggs):
     if len(aggs) == 1:
         return aggs[0].mapper
 
-    def run(it, agg):
-        return ((ki, vi) for k, v in it for ki, vi in agg.mapper(k, v))
+    elif len(aggs) == 2:
+        first, second = aggs
+        def _fuse(k, v):
+            for k2, v2 in first.mapper(k, v):
+                for k3, v3 in second.mapper(k2, v2):
+                    yield k3, v3
 
-    def _fuse(k, v):
-        it = iter([(k, v)])
-        for agg in aggs:
-            it = run(it, agg)
+    elif len(aggs) == 3:
+        first, second, third = aggs
+        def _fuse(k, v):
+            for k2, v2 in first.mapper(k, v):
+                for k3, v3 in second.mapper(k2, v2):
+                    for k4, v4 in third.mapper(k3, v3):
+                        yield k4, v4
 
-        return it
+    else: 
+        aggs = [Map(fuse(aggs[:3]))] + aggs[3:]
+        _fuse = fuse(aggs)
 
     return _fuse
 
