@@ -14,7 +14,8 @@ from .polymr import Polymr, PMap, PReduce, PJoin, ARReduce
 from .base import BlockMapper, BlockReducer
 
 
-__all__ = ["Polymr", "PMap", "PReduce", "PJoin", "ARReduce", "BlockMapper", "BlockReducer"]
+__all__ = ["Polymr", "PMap", "PReduce", "PJoin", "ARReduce", 
+        "BlockMapper", "BlockReducer"]
 
 
 def setup_logging(loglevel=logging.DEBUG):

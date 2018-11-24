@@ -1057,6 +1057,32 @@ table {
 
         </li>
         <li class="mono">
+        <span class="class_name"><a href="#polymr.BlockMapper">BlockMapper</a></span>
+        
+          
+  <ul>
+    <li class="mono"><a href="#polymr.BlockMapper.add">add</a></li>
+    <li class="mono"><a href="#polymr.BlockMapper.finish">finish</a></li>
+    <li class="mono"><a href="#polymr.BlockMapper.map">map</a></li>
+    <li class="mono"><a href="#polymr.BlockMapper.start">start</a></li>
+  </ul>
+
+        </li>
+        <li class="mono">
+        <span class="class_name"><a href="#polymr.BlockReducer">BlockReducer</a></span>
+        
+          
+  <ul>
+    <li class="mono"><a href="#polymr.BlockReducer.add">add</a></li>
+    <li class="mono"><a href="#polymr.BlockReducer.finish">finish</a></li>
+    <li class="mono"><a href="#polymr.BlockReducer.group_datasets">group_datasets</a></li>
+    <li class="mono"><a href="#polymr.BlockReducer.reduce">reduce</a></li>
+    <li class="mono"><a href="#polymr.BlockReducer.start">start</a></li>
+    <li class="mono"><a href="#polymr.BlockReducer.yield_groups">yield_groups</a></li>
+  </ul>
+
+        </li>
+        <li class="mono">
         <span class="class_name"><a href="#polymr.PJoin">PJoin</a></span>
         
           
@@ -1081,6 +1107,8 @@ table {
     <li class="mono"><a href="#polymr.PMap.count">count</a></li>
     <li class="mono"><a href="#polymr.PMap.cross_left">cross_left</a></li>
     <li class="mono"><a href="#polymr.PMap.cross_right">cross_right</a></li>
+    <li class="mono"><a href="#polymr.PMap.custom_mapper">custom_mapper</a></li>
+    <li class="mono"><a href="#polymr.PMap.custom_reducer">custom_reducer</a></li>
     <li class="mono"><a href="#polymr.PMap.filter">filter</a></li>
     <li class="mono"><a href="#polymr.PMap.flat_map">flat_map</a></li>
     <li class="mono"><a href="#polymr.PMap.fold_by">fold_by</a></li>
@@ -1089,6 +1117,8 @@ table {
     <li class="mono"><a href="#polymr.PMap.join">join</a></li>
     <li class="mono"><a href="#polymr.PMap.map">map</a></li>
     <li class="mono"><a href="#polymr.PMap.mean">mean</a></li>
+    <li class="mono"><a href="#polymr.PMap.partition_map">partition_map</a></li>
+    <li class="mono"><a href="#polymr.PMap.partition_reduce">partition_reduce</a></li>
     <li class="mono"><a href="#polymr.PMap.read">read</a></li>
     <li class="mono"><a href="#polymr.PMap.run">run</a></li>
     <li class="mono"><a href="#polymr.PMap.sample">sample</a></li>
@@ -1106,6 +1136,7 @@ table {
   <ul>
     <li class="mono"><a href="#polymr.PReduce.__init__">__init__</a></li>
     <li class="mono"><a href="#polymr.PReduce.join">join</a></li>
+    <li class="mono"><a href="#polymr.PReduce.partition_reduce">partition_reduce</a></li>
     <li class="mono"><a href="#polymr.PReduce.read">read</a></li>
     <li class="mono"><a href="#polymr.PReduce.reduce">reduce</a></li>
     <li class="mono"><a href="#polymr.PReduce.run">run</a></li>
@@ -1163,10 +1194,20 @@ best utilized via it's DSL which provides higher level functionality for complex
 
 <span class="sd">It loosely attempts to replicate interfaces such as Spark or Scalding for ease of pickup.</span>
 <span class="sd">&quot;&quot;&quot;</span>
+<span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">from</span> <span class="nn">.polymr</span> <span class="kn">import</span> <span class="n">Polymr</span><span class="p">,</span> <span class="n">PMap</span><span class="p">,</span> <span class="n">PReduce</span><span class="p">,</span> <span class="n">PJoin</span><span class="p">,</span> <span class="n">ARReduce</span>
+<span class="kn">from</span> <span class="nn">.base</span> <span class="kn">import</span> <span class="n">BlockMapper</span><span class="p">,</span> <span class="n">BlockReducer</span>
 
 
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;Polymr&quot;</span><span class="p">,</span> <span class="s2">&quot;PMap&quot;</span><span class="p">,</span> <span class="s2">&quot;PReduce&quot;</span><span class="p">,</span> <span class="s2">&quot;PJoin&quot;</span><span class="p">,</span> <span class="s2">&quot;ARReduce&quot;</span><span class="p">]</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;Polymr&quot;</span><span class="p">,</span> <span class="s2">&quot;PMap&quot;</span><span class="p">,</span> <span class="s2">&quot;PReduce&quot;</span><span class="p">,</span> <span class="s2">&quot;PJoin&quot;</span><span class="p">,</span> <span class="s2">&quot;ARReduce&quot;</span><span class="p">,</span> <span class="s2">&quot;BlockMapper&quot;</span><span class="p">,</span> <span class="s2">&quot;BlockReducer&quot;</span><span class="p">]</span>
+
+
+<span class="k">def</span> <span class="nf">setup_logging</span><span class="p">(</span><span class="n">loglevel</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Convenience function for enabling logging</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">loglevel</span><span class="p">,</span>
+                        <span class="n">format</span><span class="o">=</span><span class="s1">&#39;</span><span class="si">%(asctime)s</span><span class="s1"> </span><span class="si">%(levelname)s</span><span class="s1"> </span><span class="si">%(message)s</span><span class="s1">&#39;</span><span class="p">)</span>
 </pre></div>
 
   </div>
@@ -1199,6 +1240,13 @@ best utilized via it's DSL which provides higher level functionality for complex
 <span class="sd">        This will do a partial reduce in the map stage, completing the reduction</span>
 <span class="sd">        in the reduce stage.  It is often substantially faster than the more</span>
 <span class="sd">        general group_by.</span>
+
+<span class="sd">        `reduce_buffer` is a constant which tells Polymr how much temporary storage</span>
+<span class="sd">        to keep in memory on the map side reductions.  For example with `1000`, Polymr</span>
+<span class="sd">        will keep 1000 unique keys in memory.  In the case where a new key would spill</span>
+<span class="sd">        over the buffer size, Polymr will flush the buffer to disk and create a new</span>
+<span class="sd">        buffer.  By increasing the `reduce_buffer`, you can increase efficiency while</span>
+<span class="sd">        sacrificing memory.</span>
 
 <span class="sd">            &gt;&gt;&gt; Polymr.memory([1,2,3,4,5]).a_group_by(lambda x: 1).reduce(lambda x, y: x + y).read()</span>
 <span class="sd">            [(1, 15)]</span>
@@ -1327,6 +1375,12 @@ best utilized via it's DSL which provides higher level functionality for complex
 This will do a partial reduce in the map stage, completing the reduction
 in the reduce stage.  It is often substantially faster than the more
 general group_by.</p>
+<p><code>reduce_buffer</code> is a constant which tells Polymr how much temporary storage
+to keep in memory on the map side reductions.  For example with <code>1000</code>, Polymr
+will keep 1000 unique keys in memory.  In the case where a new key would spill
+over the buffer size, Polymr will flush the buffer to disk and create a new
+buffer.  By increasing the <code>reduce_buffer</code>, you can increase efficiency while
+sacrificing memory.</p>
 <div class="codehilite"><pre><span></span>&gt;&gt;&gt; Polymr.memory([1,2,3,4,5]).a_group_by(lambda x: 1).reduce(lambda x, y: x + y).read()
 [(1, 15)]
 </pre></div></div>
@@ -1339,6 +1393,12 @@ general group_by.</p>
 <span class="sd">    This will do a partial reduce in the map stage, completing the reduction</span>
 <span class="sd">    in the reduce stage.  It is often substantially faster than the more</span>
 <span class="sd">    general group_by.</span>
+<span class="sd">    `reduce_buffer` is a constant which tells Polymr how much temporary storage</span>
+<span class="sd">    to keep in memory on the map side reductions.  For example with `1000`, Polymr</span>
+<span class="sd">    will keep 1000 unique keys in memory.  In the case where a new key would spill</span>
+<span class="sd">    over the buffer size, Polymr will flush the buffer to disk and create a new</span>
+<span class="sd">    buffer.  By increasing the `reduce_buffer`, you can increase efficiency while</span>
+<span class="sd">    sacrificing memory.</span>
 <span class="sd">        &gt;&gt;&gt; Polymr.memory([1,2,3,4,5]).a_group_by(lambda x: 1).reduce(lambda x, y: x + y).read()</span>
 <span class="sd">        [(1, 15)]</span>
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -1389,6 +1449,367 @@ general group_by.</p>
 <span class="sd">        [(0, 6), (1, 9)]</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">reduce</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="n">x</span> <span class="o">+</span> <span class="n">y</span><span class="p">,</span> <span class="o">**</span><span class="n">options</span><span class="p">)</span>
+</pre></div>
+
+  </div>
+</div>
+
+  </div>
+  
+      </div>
+      </div>
+      
+      <div class="item">
+      <p id="polymr.BlockMapper" class="name">class <span class="ident">BlockMapper</span></p>
+      
+  
+    <div class="desc"><p>Custom BlockMapper.  User's can specify how a Mapper instance can
+consume a stream of key-values, allowing for custom logic.</p></div>
+  <div class="source_cont">
+  <p class="source_link"><a href="javascript:void(0);" onclick="toggle('source-polymr.BlockMapper', this);">Show source &equiv;</a></p>
+  <div id="source-polymr.BlockMapper" class="source">
+    <div class="codehilite"><pre><span></span><span class="k">class</span> <span class="nc">BlockMapper</span><span class="p">(</span><span class="n">Mapper</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Custom BlockMapper.  User&#39;s can specify how a Mapper instance can</span>
+<span class="sd">    consume a stream of key-values, allowing for custom logic.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="k">def</span> <span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Sets up instance variables for when a Mapper begins consumption of </span>
+<span class="sd">        a Map Block.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">pass</span>
+
+    <span class="k">def</span> <span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Logic for how to handle new key-value pairs.  This function is required</span>
+<span class="sd">        to return an iterator regardless of whether it yields data: this gives</span>
+<span class="sd">        a more flexible definition.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">finish</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Mapping is finished.  In the case of aggregations, this should yield out</span>
+<span class="sd">        all remaining key-values for Polymr to consume.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">map</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">datasets</span><span class="p">):</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">datasets</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">datasets</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">read</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">out</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+                <span class="k">yield</span> <span class="n">out</span>
+
+        <span class="k">for</span> <span class="n">out</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">finish</span><span class="p">():</span>
+            <span class="k">yield</span> <span class="n">out</span>
+</pre></div>
+
+  </div>
+</div>
+
+
+      <div class="class">
+          <h3>Ancestors (in MRO)</h3>
+          <ul class="class_list">
+          <li><a href="#polymr.BlockMapper">BlockMapper</a></li>
+          <li>polymr.base.Mapper</li>
+          <li>__builtin__.object</li>
+          </ul>
+          <h3>Methods</h3>
+            
+  <div class="item">
+    <div class="name def" id="polymr.BlockMapper.add">
+    <p>def <span class="ident">add</span>(</p><p>self, key, value)</p>
+    </div>
+    
+
+    
+  
+    <div class="desc"><p>Logic for how to handle new key-value pairs.  This function is required
+to return an iterator regardless of whether it yields data: this gives
+a more flexible definition.</p></div>
+  <div class="source_cont">
+  <p class="source_link"><a href="javascript:void(0);" onclick="toggle('source-polymr.BlockMapper.add', this);">Show source &equiv;</a></p>
+  <div id="source-polymr.BlockMapper.add" class="source">
+    <div class="codehilite"><pre><span></span><span class="k">def</span> <span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Logic for how to handle new key-value pairs.  This function is required</span>
+<span class="sd">    to return an iterator regardless of whether it yields data: this gives</span>
+<span class="sd">    a more flexible definition.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+</pre></div>
+
+  </div>
+</div>
+
+  </div>
+  
+            
+  <div class="item">
+    <div class="name def" id="polymr.BlockMapper.finish">
+    <p>def <span class="ident">finish</span>(</p><p>self)</p>
+    </div>
+    
+
+    
+  
+    <div class="desc"><p>Mapping is finished.  In the case of aggregations, this should yield out
+all remaining key-values for Polymr to consume.</p></div>
+  <div class="source_cont">
+  <p class="source_link"><a href="javascript:void(0);" onclick="toggle('source-polymr.BlockMapper.finish', this);">Show source &equiv;</a></p>
+  <div id="source-polymr.BlockMapper.finish" class="source">
+    <div class="codehilite"><pre><span></span><span class="k">def</span> <span class="nf">finish</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Mapping is finished.  In the case of aggregations, this should yield out</span>
+<span class="sd">    all remaining key-values for Polymr to consume.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">()</span>
+</pre></div>
+
+  </div>
+</div>
+
+  </div>
+  
+            
+  <div class="item">
+    <div class="name def" id="polymr.BlockMapper.map">
+    <p>def <span class="ident">map</span>(</p><p>self, *datasets)</p>
+    </div>
+    
+
+    
+  
+  <div class="source_cont">
+  <p class="source_link"><a href="javascript:void(0);" onclick="toggle('source-polymr.BlockMapper.map', this);">Show source &equiv;</a></p>
+  <div id="source-polymr.BlockMapper.map" class="source">
+    <div class="codehilite"><pre><span></span><span class="k">def</span> <span class="nf">map</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">datasets</span><span class="p">):</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">datasets</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">datasets</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">read</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">out</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+            <span class="k">yield</span> <span class="n">out</span>
+    <span class="k">for</span> <span class="n">out</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">finish</span><span class="p">():</span>
+        <span class="k">yield</span> <span class="n">out</span>
+</pre></div>
+
+  </div>
+</div>
+
+  </div>
+  
+            
+  <div class="item">
+    <div class="name def" id="polymr.BlockMapper.start">
+    <p>def <span class="ident">start</span>(</p><p>self)</p>
+    </div>
+    
+
+    
+  
+    <div class="desc"><p>Sets up instance variables for when a Mapper begins consumption of 
+a Map Block.</p></div>
+  <div class="source_cont">
+  <p class="source_link"><a href="javascript:void(0);" onclick="toggle('source-polymr.BlockMapper.start', this);">Show source &equiv;</a></p>
+  <div id="source-polymr.BlockMapper.start" class="source">
+    <div class="codehilite"><pre><span></span><span class="k">def</span> <span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Sets up instance variables for when a Mapper begins consumption of </span>
+<span class="sd">    a Map Block.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">pass</span>
+</pre></div>
+
+  </div>
+</div>
+
+  </div>
+  
+      </div>
+      </div>
+      
+      <div class="item">
+      <p id="polymr.BlockReducer" class="name">class <span class="ident">BlockReducer</span></p>
+      
+  
+    <div class="desc"><p>Custom BlockReducer.  User's can specify how a Reducer instance can
+consume a stream of key-valueiters, allowing for custom logic.</p></div>
+  <div class="source_cont">
+  <p class="source_link"><a href="javascript:void(0);" onclick="toggle('source-polymr.BlockReducer', this);">Show source &equiv;</a></p>
+  <div id="source-polymr.BlockReducer" class="source">
+    <div class="codehilite"><pre><span></span><span class="k">class</span> <span class="nc">BlockReducer</span><span class="p">(</span><span class="n">Reducer</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Custom BlockReducer.  User&#39;s can specify how a Reducer instance can</span>
+<span class="sd">    consume a stream of key-valueiters, allowing for custom logic.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">pass</span> 
+
+    <span class="k">def</span> <span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">it</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">finish</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">reduce</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">datasets</span><span class="p">):</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">datasets</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">vs</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">yield_groups</span><span class="p">(</span><span class="n">datasets</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+            <span class="k">for</span> <span class="n">nk</span><span class="p">,</span> <span class="n">nv</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">vs</span><span class="p">):</span>
+                <span class="k">yield</span> <span class="n">nk</span><span class="p">,</span> <span class="n">nv</span>
+
+        <span class="k">for</span> <span class="n">nk</span><span class="p">,</span> <span class="n">nv</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">finish</span><span class="p">():</span>
+            <span class="k">yield</span> <span class="n">nk</span><span class="p">,</span> <span class="n">nv</span>
+</pre></div>
+
+  </div>
+</div>
+
+
+      <div class="class">
+          <h3>Ancestors (in MRO)</h3>
+          <ul class="class_list">
+          <li><a href="#polymr.BlockReducer">BlockReducer</a></li>
+          <li>polymr.base.Reducer</li>
+          <li>__builtin__.object</li>
+          </ul>
+          <h3>Methods</h3>
+            
+  <div class="item">
+    <div class="name def" id="polymr.BlockReducer.add">
+    <p>def <span class="ident">add</span>(</p><p>self, k, it)</p>
+    </div>
+    
+
+    
+  
+  <div class="source_cont">
+  <p class="source_link"><a href="javascript:void(0);" onclick="toggle('source-polymr.BlockReducer.add', this);">Show source &equiv;</a></p>
+  <div id="source-polymr.BlockReducer.add" class="source">
+    <div class="codehilite"><pre><span></span><span class="k">def</span> <span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">it</span><span class="p">):</span>
+    <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+</pre></div>
+
+  </div>
+</div>
+
+  </div>
+  
+            
+  <div class="item">
+    <div class="name def" id="polymr.BlockReducer.finish">
+    <p>def <span class="ident">finish</span>(</p><p>self)</p>
+    </div>
+    
+
+    
+  
+  <div class="source_cont">
+  <p class="source_link"><a href="javascript:void(0);" onclick="toggle('source-polymr.BlockReducer.finish', this);">Show source &equiv;</a></p>
+  <div id="source-polymr.BlockReducer.finish" class="source">
+    <div class="codehilite"><pre><span></span><span class="k">def</span> <span class="nf">finish</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">return</span> <span class="p">()</span>
+</pre></div>
+
+  </div>
+</div>
+
+  </div>
+  
+            
+  <div class="item">
+    <div class="name def" id="polymr.BlockReducer.group_datasets">
+    <p>def <span class="ident">group_datasets</span>(</p><p>self, dataset)</p>
+    </div>
+    
+
+    
+  
+  <div class="source_cont">
+  <p class="source_link"><a href="javascript:void(0);" onclick="toggle('source-polymr.BlockReducer.group_datasets', this);">Show source &equiv;</a></p>
+  <div id="source-polymr.BlockReducer.group_datasets" class="source">
+    <div class="codehilite"><pre><span></span><span class="k">def</span> <span class="nf">group_datasets</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">dataset</span> <span class="o">=</span> <span class="n">MergeDataset</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">dataset</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">dataset</span> <span class="o">=</span> <span class="n">EmptyDataset</span><span class="p">()</span>
+    
+    <span class="k">return</span> <span class="n">dataset</span>
+</pre></div>
+
+  </div>
+</div>
+
+  </div>
+  
+            
+  <div class="item">
+    <div class="name def" id="polymr.BlockReducer.reduce">
+    <p>def <span class="ident">reduce</span>(</p><p>self, *datasets)</p>
+    </div>
+    
+
+    
+  
+  <div class="source_cont">
+  <p class="source_link"><a href="javascript:void(0);" onclick="toggle('source-polymr.BlockReducer.reduce', this);">Show source &equiv;</a></p>
+  <div id="source-polymr.BlockReducer.reduce" class="source">
+    <div class="codehilite"><pre><span></span><span class="k">def</span> <span class="nf">reduce</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">datasets</span><span class="p">):</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">datasets</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">vs</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">yield_groups</span><span class="p">(</span><span class="n">datasets</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+        <span class="k">for</span> <span class="n">nk</span><span class="p">,</span> <span class="n">nv</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">vs</span><span class="p">):</span>
+            <span class="k">yield</span> <span class="n">nk</span><span class="p">,</span> <span class="n">nv</span>
+    <span class="k">for</span> <span class="n">nk</span><span class="p">,</span> <span class="n">nv</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">finish</span><span class="p">():</span>
+        <span class="k">yield</span> <span class="n">nk</span><span class="p">,</span> <span class="n">nv</span>
+</pre></div>
+
+  </div>
+</div>
+
+  </div>
+  
+            
+  <div class="item">
+    <div class="name def" id="polymr.BlockReducer.start">
+    <p>def <span class="ident">start</span>(</p><p>self)</p>
+    </div>
+    
+
+    
+  
+  <div class="source_cont">
+  <p class="source_link"><a href="javascript:void(0);" onclick="toggle('source-polymr.BlockReducer.start', this);">Show source &equiv;</a></p>
+  <div id="source-polymr.BlockReducer.start" class="source">
+    <div class="codehilite"><pre><span></span><span class="k">def</span> <span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">pass</span> 
+</pre></div>
+
+  </div>
+</div>
+
+  </div>
+  
+            
+  <div class="item">
+    <div class="name def" id="polymr.BlockReducer.yield_groups">
+    <p>def <span class="ident">yield_groups</span>(</p><p>self, dataset)</p>
+    </div>
+    
+
+    
+  
+  <div class="source_cont">
+  <p class="source_link"><a href="javascript:void(0);" onclick="toggle('source-polymr.BlockReducer.yield_groups', this);">Show source &equiv;</a></p>
+  <div id="source-polymr.BlockReducer.yield_groups" class="source">
+    <div class="codehilite"><pre><span></span><span class="k">def</span> <span class="nf">yield_groups</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">):</span>
+    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">group_datasets</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span><span class="o">.</span><span class="n">grouped_read</span><span class="p">()</span>
 </pre></div>
 
   </div>
@@ -1731,6 +2152,87 @@ and fuses them together into a single operation, speeding up many types of opera
 
         <span class="k">return</span> <span class="bp">self</span>
 
+    <span class="k">def</span> <span class="nf">custom_mapper</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mapper</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">options</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Custom Mapper provides a low-level interface to the underlying map function.</span>
+<span class="sd">        Users can provide any instance which adhere&#39;s to the Mapper interface, allowing</span>
+<span class="sd">        for powerful or specific implementations.</span>
+
+<span class="sd">        This is typically used very rarely and has some caveats such as not fusing</span>
+<span class="sd">        with other Mappers.  Similarly, the implementer needs to understand more of the</span>
+<span class="sd">        nuances associated with keys.</span>
+
+<span class="sd">            &gt;&gt;&gt; from polymr.base import Map</span>
+<span class="sd">            &gt;&gt;&gt; Polymr.memory([1,2,3,4,5]).custom_mapper(Map(lambda k, x: [(k, x+1)])).read()</span>
+<span class="sd">            [2, 3, 4, 5, 6]</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">mapper</span><span class="p">,</span> <span class="n">Mapper</span><span class="p">)</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="n">name</span> <span class="k">if</span> <span class="n">name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span> <span class="k">else</span> <span class="nb">str</span><span class="p">(</span><span class="n">mapper</span><span class="p">)</span>
+        <span class="n">me</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">checkpoint</span><span class="p">()</span>
+        <span class="n">source</span><span class="p">,</span> <span class="n">pmer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pmer</span><span class="o">.</span><span class="n">_add_mapper</span><span class="p">([</span><span class="n">me</span><span class="o">.</span><span class="n">source</span><span class="p">],</span> 
+                <span class="n">mapper</span><span class="p">,</span>
+                <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+                <span class="n">options</span><span class="o">=</span><span class="n">options</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="n">PMap</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">pmer</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">custom_reducer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reducer</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">options</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Allows the user to provide any Reducer which adheres to the Reducer interface.</span>
+<span class="sd">        This is a very powerful, low-level interface which should be avoided when possible</span>
+<span class="sd">        as it&#39;s easy to write bugs.</span>
+
+<span class="sd">            &gt;&gt;&gt; Polymr.memory([1,2,3,4,5]).custom_reducer(Reduce(lambda k, x: [(k, sum(x))])).read()</span>
+<span class="sd">            [[(0, 1)], [(1, 2)], [(2, 3)], [(3, 4)], [(4, 5)]]</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reducer</span><span class="p">,</span> <span class="n">Reducer</span><span class="p">)</span>
+        <span class="n">me</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">checkpoint</span><span class="p">(</span><span class="n">force</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="n">name</span> <span class="k">if</span> <span class="n">name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span> <span class="k">else</span> <span class="nb">str</span><span class="p">(</span><span class="n">reducer</span><span class="p">)</span>
+        <span class="n">new_source</span><span class="p">,</span> <span class="n">pmer</span> <span class="o">=</span> <span class="n">me</span><span class="o">.</span><span class="n">pmer</span><span class="o">.</span><span class="n">_add_reducer</span><span class="p">([</span><span class="n">me</span><span class="o">.</span><span class="n">source</span><span class="p">],</span> 
+                <span class="n">reducer</span><span class="p">,</span> 
+                <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+                <span class="n">options</span><span class="o">=</span><span class="n">options</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="n">PMap</span><span class="p">(</span><span class="n">new_source</span><span class="p">,</span> <span class="n">pmer</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">partition_map</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="o">**</span><span class="n">options</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Provides a medium-level interface for writing custom functionality for mapping </span>
+<span class="sd">        a partition.  This can be used for creating custom logic in mappers for the sake</span>
+<span class="sd">        of performance or additional functionality.</span>
+
+<span class="sd">        `f` is a function that takes in an iterator of items in the partition and yields </span>
+<span class="sd">        out group keys and new values.</span>
+
+
+<span class="sd">            &gt;&gt;&gt; def plus_one(items):</span>
+<span class="sd">            ...   for num in items:</span>
+<span class="sd">            ...     yield num, num + 1</span>
+<span class="sd">            ...</span>
+<span class="sd">            &gt;&gt;&gt; Polymr.memory([1,2,3,4,5]).partition_map(plus_one).read()</span>
+<span class="sd">            [2, 3, 4, 5, 6]</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">custom_mapper</span><span class="p">(</span><span class="n">StreamMapper</span><span class="p">(</span><span class="n">f</span><span class="p">),</span> <span class="o">**</span><span class="n">options</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">partition_reduce</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">f</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        `partition_reduce` is a medium-level function that allows for more complex logic</span>
+<span class="sd">        during reductions.  It can be useful in certain cases where reductions over sets</span>
+<span class="sd">        of reduced values is convenient, such as returning only the top K items in a dataset</span>
+
+<span class="sd">            &gt;&gt;&gt; def largest_number(it):</span>
+<span class="sd">            ...   largest = float(&#39;-inf&#39;)</span>
+<span class="sd">            ...   for group_key, its in it:</span>
+<span class="sd">            ...     for value in its:</span>
+<span class="sd">            ...       largest = max(largest, value)</span>
+<span class="sd">            ...   yield &quot;Largest&quot;, largest</span>
+<span class="sd">            ...</span>
+<span class="sd">            &gt;&gt;&gt; Polymr.memory([1,2,3,4,5]).partition_reduce(largest_number).read(n_partitions=1)</span>
+<span class="sd">            [(&#39;Largest&#39;, 5)]</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">custom_reducer</span><span class="p">(</span><span class="n">StreamReducer</span><span class="p">(</span><span class="n">f</span><span class="p">))</span>
+
     <span class="k">def</span> <span class="nf">map</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">f</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Maps elements in the underlying collection using function </span>
@@ -1860,12 +2362,15 @@ and fuses them together into a single operation, speeding up many types of opera
 <span class="sd">            &gt;&gt;&gt; Polymr.memory(ages).mean(lambda x: x[0], lambda v: v[1]).read()</span>
 <span class="sd">            [(&#39;Alice&#39;, 42.0), (&#39;Andrew&#39;, 22.5), (&#39;Bob&#39;, 51.0)]</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">def</span> <span class="nf">_binop</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+        <span class="k">def</span> <span class="nf">_mean_binop</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
             <span class="k">return</span> <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">y</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">y</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
 
+        <span class="k">def</span> <span class="nf">_average</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+            <span class="k">return</span> <span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="o">/</span> <span class="nb">float</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">1</span><span class="p">]))</span>
+
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">a_group_by</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">v</span><span class="p">:</span> <span class="p">(</span><span class="n">value</span><span class="p">(</span><span class="n">v</span><span class="p">),</span> <span class="mi">1</span><span class="p">))</span> \
-                <span class="o">.</span><span class="n">reduce</span><span class="p">(</span><span class="n">_binop</span><span class="p">,</span> <span class="o">**</span><span class="n">options</span><span class="p">)</span> \
-                <span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="o">/</span> <span class="nb">float</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">1</span><span class="p">])))</span>
+                <span class="o">.</span><span class="n">reduce</span><span class="p">(</span><span class="n">_mean_binop</span><span class="p">,</span> <span class="o">**</span><span class="n">options</span><span class="p">)</span> \
+                <span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">_average</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">inspect</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="nb">exit</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -2037,7 +2542,7 @@ and fuses them together into a single operation, speeding up many types of opera
             
   <div class="item">
     <div class="name def" id="polymr.PMap.a_group_by">
-    <p>def <span class="ident">a_group_by</span>(</p><p>self, key, vf=&lt;function &lt;lambda&gt; at 0x7f5f23ec20c8&gt;)</p>
+    <p>def <span class="ident">a_group_by</span>(</p><p>self, key, vf=&lt;function &lt;lambda&gt; at 0x7fa29cdea938&gt;)</p>
     </div>
     
 
@@ -2166,7 +2671,7 @@ the results of the computation:</p>
             
   <div class="item">
     <div class="name def" id="polymr.PMap.count">
-    <p>def <span class="ident">count</span>(</p><p>self, key=&lt;function &lt;lambda&gt; at 0x7f5f23ec2398&gt;, **options)</p>
+    <p>def <span class="ident">count</span>(</p><p>self, key=&lt;function &lt;lambda&gt; at 0x7fa29cdeac08&gt;, **options)</p>
     </div>
     
 
@@ -2298,6 +2803,98 @@ will cache the right dataset in memory, speeding up the computation significantl
   
             
   <div class="item">
+    <div class="name def" id="polymr.PMap.custom_mapper">
+    <p>def <span class="ident">custom_mapper</span>(</p><p>self, mapper, name=None, **options)</p>
+    </div>
+    
+
+    
+  
+    <div class="desc"><p>Custom Mapper provides a low-level interface to the underlying map function.
+Users can provide any instance which adhere's to the Mapper interface, allowing
+for powerful or specific implementations.</p>
+<p>This is typically used very rarely and has some caveats such as not fusing
+with other Mappers.  Similarly, the implementer needs to understand more of the
+nuances associated with keys.</p>
+<div class="codehilite"><pre><span></span><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span> <span class="nn">polymr.base</span> <span class="kn">import</span> <span class="n">Map</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">Polymr</span><span class="o">.</span><span class="n">memory</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="mi">4</span><span class="p">,</span><span class="mi">5</span><span class="p">])</span><span class="o">.</span><span class="n">custom_mapper</span><span class="p">(</span><span class="n">Map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">k</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="p">[(</span><span class="n">k</span><span class="p">,</span> <span class="n">x</span><span class="o">+</span><span class="mi">1</span><span class="p">)]))</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+<span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">]</span>
+</pre></div></div>
+  <div class="source_cont">
+  <p class="source_link"><a href="javascript:void(0);" onclick="toggle('source-polymr.PMap.custom_mapper', this);">Show source &equiv;</a></p>
+  <div id="source-polymr.PMap.custom_mapper" class="source">
+    <div class="codehilite"><pre><span></span><span class="k">def</span> <span class="nf">custom_mapper</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mapper</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">options</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Custom Mapper provides a low-level interface to the underlying map function.</span>
+<span class="sd">    Users can provide any instance which adhere&#39;s to the Mapper interface, allowing</span>
+<span class="sd">    for powerful or specific implementations.</span>
+<span class="sd">    This is typically used very rarely and has some caveats such as not fusing</span>
+<span class="sd">    with other Mappers.  Similarly, the implementer needs to understand more of the</span>
+<span class="sd">    nuances associated with keys.</span>
+<span class="sd">        &gt;&gt;&gt; from polymr.base import Map</span>
+<span class="sd">        &gt;&gt;&gt; Polymr.memory([1,2,3,4,5]).custom_mapper(Map(lambda k, x: [(k, x+1)])).read()</span>
+<span class="sd">        [2, 3, 4, 5, 6]</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">mapper</span><span class="p">,</span> <span class="n">Mapper</span><span class="p">)</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="n">name</span> <span class="k">if</span> <span class="n">name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span> <span class="k">else</span> <span class="nb">str</span><span class="p">(</span><span class="n">mapper</span><span class="p">)</span>
+    <span class="n">me</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">checkpoint</span><span class="p">()</span>
+    <span class="n">source</span><span class="p">,</span> <span class="n">pmer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pmer</span><span class="o">.</span><span class="n">_add_mapper</span><span class="p">([</span><span class="n">me</span><span class="o">.</span><span class="n">source</span><span class="p">],</span> 
+            <span class="n">mapper</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+            <span class="n">options</span><span class="o">=</span><span class="n">options</span><span class="p">)</span>
+    
+    <span class="k">return</span> <span class="n">PMap</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">pmer</span><span class="p">)</span>
+</pre></div>
+
+  </div>
+</div>
+
+  </div>
+  
+            
+  <div class="item">
+    <div class="name def" id="polymr.PMap.custom_reducer">
+    <p>def <span class="ident">custom_reducer</span>(</p><p>self, reducer, name=None, **options)</p>
+    </div>
+    
+
+    
+  
+    <div class="desc"><p>Allows the user to provide any Reducer which adheres to the Reducer interface.
+This is a very powerful, low-level interface which should be avoided when possible
+as it's easy to write bugs.</p>
+<div class="codehilite"><pre><span></span>&gt;&gt;&gt; Polymr.memory([1,2,3,4,5]).custom_reducer(Reduce(lambda k, x: [(k, sum(x))])).read()
+[[(0, 1)], [(1, 2)], [(2, 3)], [(3, 4)], [(4, 5)]]
+</pre></div></div>
+  <div class="source_cont">
+  <p class="source_link"><a href="javascript:void(0);" onclick="toggle('source-polymr.PMap.custom_reducer', this);">Show source &equiv;</a></p>
+  <div id="source-polymr.PMap.custom_reducer" class="source">
+    <div class="codehilite"><pre><span></span><span class="k">def</span> <span class="nf">custom_reducer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reducer</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">options</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Allows the user to provide any Reducer which adheres to the Reducer interface.</span>
+<span class="sd">    This is a very powerful, low-level interface which should be avoided when possible</span>
+<span class="sd">    as it&#39;s easy to write bugs.</span>
+<span class="sd">        &gt;&gt;&gt; Polymr.memory([1,2,3,4,5]).custom_reducer(Reduce(lambda k, x: [(k, sum(x))])).read()</span>
+<span class="sd">        [[(0, 1)], [(1, 2)], [(2, 3)], [(3, 4)], [(4, 5)]]</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reducer</span><span class="p">,</span> <span class="n">Reducer</span><span class="p">)</span>
+    <span class="n">me</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">checkpoint</span><span class="p">(</span><span class="n">force</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="n">name</span> <span class="k">if</span> <span class="n">name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span> <span class="k">else</span> <span class="nb">str</span><span class="p">(</span><span class="n">reducer</span><span class="p">)</span>
+    <span class="n">new_source</span><span class="p">,</span> <span class="n">pmer</span> <span class="o">=</span> <span class="n">me</span><span class="o">.</span><span class="n">pmer</span><span class="o">.</span><span class="n">_add_reducer</span><span class="p">([</span><span class="n">me</span><span class="o">.</span><span class="n">source</span><span class="p">],</span> 
+            <span class="n">reducer</span><span class="p">,</span> 
+            <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+            <span class="n">options</span><span class="o">=</span><span class="n">options</span><span class="p">)</span>
+    
+    <span class="k">return</span> <span class="n">PMap</span><span class="p">(</span><span class="n">new_source</span><span class="p">,</span> <span class="n">pmer</span><span class="p">)</span>
+</pre></div>
+
+  </div>
+</div>
+
+  </div>
+  
+            
+  <div class="item">
     <div class="name def" id="polymr.PMap.filter">
     <p>def <span class="ident">filter</span>(</p><p>self, f)</p>
     </div>
@@ -2369,7 +2966,7 @@ flattening the results</p>
             
   <div class="item">
     <div class="name def" id="polymr.PMap.fold_by">
-    <p>def <span class="ident">fold_by</span>(</p><p>self, key, binop, value=&lt;function &lt;lambda&gt; at 0x7f5f23ec21b8&gt;, **options)</p>
+    <p>def <span class="ident">fold_by</span>(</p><p>self, key, binop, value=&lt;function &lt;lambda&gt; at 0x7fa29cdeaa28&gt;, **options)</p>
     </div>
     
 
@@ -2394,7 +2991,7 @@ flattening the results</p>
             
   <div class="item">
     <div class="name def" id="polymr.PMap.group_by">
-    <p>def <span class="ident">group_by</span>(</p><p>self, key, vf=&lt;function &lt;lambda&gt; at 0x7f5f23ec1f50&gt;)</p>
+    <p>def <span class="ident">group_by</span>(</p><p>self, key, vf=&lt;function &lt;lambda&gt; at 0x7fa29cdea848&gt;)</p>
     </div>
     
 
@@ -2533,7 +3130,7 @@ collections together.</p></div>
             
   <div class="item">
     <div class="name def" id="polymr.PMap.mean">
-    <p>def <span class="ident">mean</span>(</p><p>self, key=&lt;function &lt;lambda&gt; at 0x7f5f23ec2488&gt;, value=&lt;function &lt;lambda&gt; at 0x7f5f23ec2500&gt;, **options)</p>
+    <p>def <span class="ident">mean</span>(</p><p>self, key=&lt;function &lt;lambda&gt; at 0x7fa29cdeacf8&gt;, value=&lt;function &lt;lambda&gt; at 0x7fa29cdead70&gt;, **options)</p>
     </div>
     
 
@@ -2556,11 +3153,107 @@ mapped by a value function:</p>
 <span class="sd">        &gt;&gt;&gt; Polymr.memory(ages).mean(lambda x: x[0], lambda v: v[1]).read()</span>
 <span class="sd">        [(&#39;Alice&#39;, 42.0), (&#39;Andrew&#39;, 22.5), (&#39;Bob&#39;, 51.0)]</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">def</span> <span class="nf">_binop</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_mean_binop</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">y</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">y</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">def</span> <span class="nf">_average</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="o">/</span> <span class="nb">float</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">1</span><span class="p">]))</span>
     <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">a_group_by</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">v</span><span class="p">:</span> <span class="p">(</span><span class="n">value</span><span class="p">(</span><span class="n">v</span><span class="p">),</span> <span class="mi">1</span><span class="p">))</span> \
-            <span class="o">.</span><span class="n">reduce</span><span class="p">(</span><span class="n">_binop</span><span class="p">,</span> <span class="o">**</span><span class="n">options</span><span class="p">)</span> \
-            <span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="o">/</span> <span class="nb">float</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">1</span><span class="p">])))</span>
+            <span class="o">.</span><span class="n">reduce</span><span class="p">(</span><span class="n">_mean_binop</span><span class="p">,</span> <span class="o">**</span><span class="n">options</span><span class="p">)</span> \
+            <span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">_average</span><span class="p">)</span>
+</pre></div>
+
+  </div>
+</div>
+
+  </div>
+  
+            
+  <div class="item">
+    <div class="name def" id="polymr.PMap.partition_map">
+    <p>def <span class="ident">partition_map</span>(</p><p>self, f, **options)</p>
+    </div>
+    
+
+    
+  
+    <div class="desc"><p>Provides a medium-level interface for writing custom functionality for mapping 
+a partition.  This can be used for creating custom logic in mappers for the sake
+of performance or additional functionality.</p>
+<p><code>f</code> is a function that takes in an iterator of items in the partition and yields 
+out group keys and new values.</p>
+<div class="codehilite"><pre><span></span>&gt;&gt;&gt; def plus_one(items):
+...   for num in items:
+...     yield num, num + 1
+...
+&gt;&gt;&gt; Polymr.memory([1,2,3,4,5]).partition_map(plus_one).read()
+[2, 3, 4, 5, 6]
+</pre></div></div>
+  <div class="source_cont">
+  <p class="source_link"><a href="javascript:void(0);" onclick="toggle('source-polymr.PMap.partition_map', this);">Show source &equiv;</a></p>
+  <div id="source-polymr.PMap.partition_map" class="source">
+    <div class="codehilite"><pre><span></span><span class="k">def</span> <span class="nf">partition_map</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="o">**</span><span class="n">options</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Provides a medium-level interface for writing custom functionality for mapping </span>
+<span class="sd">    a partition.  This can be used for creating custom logic in mappers for the sake</span>
+<span class="sd">    of performance or additional functionality.</span>
+<span class="sd">    `f` is a function that takes in an iterator of items in the partition and yields </span>
+<span class="sd">    out group keys and new values.</span>
+<span class="sd">        &gt;&gt;&gt; def plus_one(items):</span>
+<span class="sd">        ...   for num in items:</span>
+<span class="sd">        ...     yield num, num + 1</span>
+<span class="sd">        ...</span>
+<span class="sd">        &gt;&gt;&gt; Polymr.memory([1,2,3,4,5]).partition_map(plus_one).read()</span>
+<span class="sd">        [2, 3, 4, 5, 6]</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">custom_mapper</span><span class="p">(</span><span class="n">StreamMapper</span><span class="p">(</span><span class="n">f</span><span class="p">),</span> <span class="o">**</span><span class="n">options</span><span class="p">)</span>
+</pre></div>
+
+  </div>
+</div>
+
+  </div>
+  
+            
+  <div class="item">
+    <div class="name def" id="polymr.PMap.partition_reduce">
+    <p>def <span class="ident">partition_reduce</span>(</p><p>self, f)</p>
+    </div>
+    
+
+    
+  
+    <div class="desc"><p><code>partition_reduce</code> is a medium-level function that allows for more complex logic
+during reductions.  It can be useful in certain cases where reductions over sets
+of reduced values is convenient, such as returning only the top K items in a dataset</p>
+<div class="codehilite"><pre><span></span>&gt;&gt;&gt; def largest_number(it):
+...   largest = float(&#39;-inf&#39;)
+...   for group_key, its in it:
+...     for value in its:
+...       largest = max(largest, value)
+...   yield &quot;Largest&quot;, largest
+...
+&gt;&gt;&gt; Polymr.memory([1,2,3,4,5]).partition_reduce(largest_number).read(n_partitions=1)
+[(&#39;Largest&#39;, 5)]
+</pre></div></div>
+  <div class="source_cont">
+  <p class="source_link"><a href="javascript:void(0);" onclick="toggle('source-polymr.PMap.partition_reduce', this);">Show source &equiv;</a></p>
+  <div id="source-polymr.PMap.partition_reduce" class="source">
+    <div class="codehilite"><pre><span></span><span class="k">def</span> <span class="nf">partition_reduce</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">f</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    `partition_reduce` is a medium-level function that allows for more complex logic</span>
+<span class="sd">    during reductions.  It can be useful in certain cases where reductions over sets</span>
+<span class="sd">    of reduced values is convenient, such as returning only the top K items in a dataset</span>
+<span class="sd">        &gt;&gt;&gt; def largest_number(it):</span>
+<span class="sd">        ...   largest = float(&#39;-inf&#39;)</span>
+<span class="sd">        ...   for group_key, its in it:</span>
+<span class="sd">        ...     for value in its:</span>
+<span class="sd">        ...       largest = max(largest, value)</span>
+<span class="sd">        ...   yield &quot;Largest&quot;, largest</span>
+<span class="sd">        ...</span>
+<span class="sd">        &gt;&gt;&gt; Polymr.memory([1,2,3,4,5]).partition_reduce(largest_number).read(n_partitions=1)</span>
+<span class="sd">        [(&#39;Largest&#39;, 5)]</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">custom_reducer</span><span class="p">(</span><span class="n">StreamReducer</span><span class="p">(</span><span class="n">f</span><span class="p">))</span>
 </pre></div>
 
   </div>
@@ -2855,6 +3548,19 @@ tab-delimited output, and sinks it to the provided path:</p>
 
         <span class="n">pmer</span> <span class="o">=</span> <span class="n">Polymr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pmer</span><span class="o">.</span><span class="n">graph</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="n">other</span><span class="o">.</span><span class="n">pmer</span><span class="o">.</span><span class="n">graph</span><span class="p">))</span>
         <span class="k">return</span> <span class="n">PJoin</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">,</span> <span class="n">pmer</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">source</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">partition_reduce</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">f</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Provides medium-level functionality for partition reductions.  See </span>
+<span class="sd">        PMap.partition_reduce for more details.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">reducer</span> <span class="o">=</span> <span class="n">StreamReducer</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">reducer</span><span class="p">)</span>
+        <span class="n">new_source</span><span class="p">,</span> <span class="n">pmer</span> <span class="o">=</span> <span class="n">me</span><span class="o">.</span><span class="n">pmer</span><span class="o">.</span><span class="n">_add_reducer</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">pm</span><span class="o">.</span><span class="n">source</span><span class="p">],</span> 
+                <span class="n">reducer</span><span class="p">,</span> 
+                <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">PMap</span><span class="p">(</span><span class="n">new_source</span><span class="p">,</span> <span class="n">pmer</span><span class="p">)</span>
 </pre></div>
 
   </div>
@@ -2914,6 +3620,38 @@ tab-delimited output, and sinks it to the provided path:</p>
         <span class="n">other</span> <span class="o">=</span> <span class="n">other</span><span class="o">.</span><span class="n">checkpoint</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
     <span class="n">pmer</span> <span class="o">=</span> <span class="n">Polymr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pmer</span><span class="o">.</span><span class="n">graph</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="n">other</span><span class="o">.</span><span class="n">pmer</span><span class="o">.</span><span class="n">graph</span><span class="p">))</span>
     <span class="k">return</span> <span class="n">PJoin</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">,</span> <span class="n">pmer</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">source</span><span class="p">)</span>
+</pre></div>
+
+  </div>
+</div>
+
+  </div>
+  
+            
+  <div class="item">
+    <div class="name def" id="polymr.PReduce.partition_reduce">
+    <p>def <span class="ident">partition_reduce</span>(</p><p>self, f)</p>
+    </div>
+    
+
+    
+  
+    <div class="desc"><p>Provides medium-level functionality for partition reductions.  See 
+PMap.partition_reduce for more details.</p></div>
+  <div class="source_cont">
+  <p class="source_link"><a href="javascript:void(0);" onclick="toggle('source-polymr.PReduce.partition_reduce', this);">Show source &equiv;</a></p>
+  <div id="source-polymr.PReduce.partition_reduce" class="source">
+    <div class="codehilite"><pre><span></span><span class="k">def</span> <span class="nf">partition_reduce</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">f</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Provides medium-level functionality for partition reductions.  See </span>
+<span class="sd">    PMap.partition_reduce for more details.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">reducer</span> <span class="o">=</span> <span class="n">StreamReducer</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">reducer</span><span class="p">)</span>
+    <span class="n">new_source</span><span class="p">,</span> <span class="n">pmer</span> <span class="o">=</span> <span class="n">me</span><span class="o">.</span><span class="n">pmer</span><span class="o">.</span><span class="n">_add_reducer</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">pm</span><span class="o">.</span><span class="n">source</span><span class="p">],</span> 
+            <span class="n">reducer</span><span class="p">,</span> 
+            <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">PMap</span><span class="p">(</span><span class="n">new_source</span><span class="p">,</span> <span class="n">pmer</span><span class="p">)</span>
 </pre></div>
 
   </div>
@@ -3015,7 +3753,7 @@ By default, uses /tmp as temporary storage.</p>
             
   <div class="item">
     <div class="name def" id="polymr.PReduce.unique">
-    <p>def <span class="ident">unique</span>(</p><p>self, key=&lt;function &lt;lambda&gt; at 0x7f5f23ec2b90&gt;)</p>
+    <p>def <span class="ident">unique</span>(</p><p>self, key=&lt;function &lt;lambda&gt; at 0x7fa29cdec488&gt;)</p>
     </div>
     
 
