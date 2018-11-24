@@ -203,7 +203,7 @@ class PolymrTest(unittest.TestCase):
                     .sum()
 
         output = self.items \
-                .cross_tiny_right(total, lambda v1, v2: round(v1 / float(v2[1]), 4)) \
+                .cross_right(total, lambda v1, v2: round(v1 / float(v2[1]), 4)) \
                 .sort_by(lambda x: x)
 
         results = list(output.run())
@@ -216,7 +216,7 @@ class PolymrTest(unittest.TestCase):
         Tests cross product of multiple values
         """
         output = self.items \
-                .cross_tiny_left(self.items, lambda v1, v2: v1 * v2)
+                .cross_left(self.items, lambda v1, v2: v1 * v2)
 
         results = sorted(list(output.run()))
         expected = sorted([i * k for i in range(10, 20) for k in range(10, 20)])
