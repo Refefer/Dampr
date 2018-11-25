@@ -47,7 +47,7 @@ PySpark requires large amounts of setup to really get going.  It's the antithesi
 
 API
 ---
-[docs/polymr/index.html](http://htmlpreview.github.io/?https://github.com/Refefer/Dampr/blob/master/docs/polymr/index.html)
+[docs/dampr/index.html](http://htmlpreview.github.io/?https://github.com/Refefer/Dampr/blob/master/docs/dampr/index.html)
 
 Examples
 ---
