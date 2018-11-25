@@ -1494,7 +1494,7 @@ consume a stream of key-values, allowing for custom logic.</p></div>
     <span class="k">def</span> <span class="nf">finish</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Mapping is finished.  In the case of aggregations, this should yield out</span>
-<span class="sd">        all remaining key-values for Polymr to consume.</span>
+<span class="sd">        all remaining key-values to consume.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="p">()</span>
 
@@ -1560,14 +1560,14 @@ a more flexible definition.</p></div>
     
   
     <div class="desc"><p>Mapping is finished.  In the case of aggregations, this should yield out
-all remaining key-values for Polymr to consume.</p></div>
+all remaining key-values to consume.</p></div>
   <div class="source_cont">
   <p class="source_link"><a href="javascript:void(0);" onclick="toggle('source-dampr.BlockMapper.finish', this);">Show source &equiv;</a></p>
   <div id="source-dampr.BlockMapper.finish" class="source">
     <div class="codehilite"><pre><span></span><span class="k">def</span> <span class="nf">finish</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Mapping is finished.  In the case of aggregations, this should yield out</span>
-<span class="sd">    all remaining key-values for Polymr to consume.</span>
+<span class="sd">    all remaining key-values to consume.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="p">()</span>
 </pre></div>
@@ -2919,7 +2919,7 @@ and fuses them together into a single operation, speeding up many types of opera
             
   <div class="item">
     <div class="name def" id="dampr.PMap.a_group_by">
-    <p>def <span class="ident">a_group_by</span>(</p><p>self, key, vf=&lt;function &lt;lambda&gt; at 0x7fb39f6c1938&gt;)</p>
+    <p>def <span class="ident">a_group_by</span>(</p><p>self, key, vf=&lt;function &lt;lambda&gt; at 0x7fd6c26ed938&gt;)</p>
     </div>
     
 
@@ -3048,7 +3048,7 @@ the results of the computation:</p>
             
   <div class="item">
     <div class="name def" id="dampr.PMap.count">
-    <p>def <span class="ident">count</span>(</p><p>self, key=&lt;function &lt;lambda&gt; at 0x7fb39f6c1c08&gt;, **options)</p>
+    <p>def <span class="ident">count</span>(</p><p>self, key=&lt;function &lt;lambda&gt; at 0x7fd6c26edc08&gt;, **options)</p>
     </div>
     
 
@@ -3343,7 +3343,7 @@ flattening the results</p>
             
   <div class="item">
     <div class="name def" id="dampr.PMap.fold_by">
-    <p>def <span class="ident">fold_by</span>(</p><p>self, key, binop, value=&lt;function &lt;lambda&gt; at 0x7fb39f6c1a28&gt;, **options)</p>
+    <p>def <span class="ident">fold_by</span>(</p><p>self, key, binop, value=&lt;function &lt;lambda&gt; at 0x7fd6c26eda28&gt;, **options)</p>
     </div>
     
 
@@ -3368,7 +3368,7 @@ flattening the results</p>
             
   <div class="item">
     <div class="name def" id="dampr.PMap.group_by">
-    <p>def <span class="ident">group_by</span>(</p><p>self, key, vf=&lt;function &lt;lambda&gt; at 0x7fb39f6c1848&gt;)</p>
+    <p>def <span class="ident">group_by</span>(</p><p>self, key, vf=&lt;function &lt;lambda&gt; at 0x7fd6c26ed848&gt;)</p>
     </div>
     
 
@@ -3507,7 +3507,7 @@ collections together.</p></div>
             
   <div class="item">
     <div class="name def" id="dampr.PMap.mean">
-    <p>def <span class="ident">mean</span>(</p><p>self, key=&lt;function &lt;lambda&gt; at 0x7fb39f6c1cf8&gt;, value=&lt;function &lt;lambda&gt; at 0x7fb39f6c1d70&gt;, **options)</p>
+    <p>def <span class="ident">mean</span>(</p><p>self, key=&lt;function &lt;lambda&gt; at 0x7fd6c26edcf8&gt;, value=&lt;function &lt;lambda&gt; at 0x7fd6c26edd70&gt;, **options)</p>
     </div>
     
 
@@ -4130,7 +4130,7 @@ By default, uses /tmp as temporary storage.</p>
             
   <div class="item">
     <div class="name def" id="dampr.PReduce.unique">
-    <p>def <span class="ident">unique</span>(</p><p>self, key=&lt;function &lt;lambda&gt; at 0x7fb39f6c4488&gt;)</p>
+    <p>def <span class="ident">unique</span>(</p><p>self, key=&lt;function &lt;lambda&gt; at 0x7fd6c26f0488&gt;)</p>
     </div>
     
 
