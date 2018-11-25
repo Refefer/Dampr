@@ -48,7 +48,7 @@ class BlockMapper(Mapper):
     def finish(self):
         """
         Mapping is finished.  In the case of aggregations, this should yield out
-        all remaining key-values for Polymr to consume.
+        all remaining key-values to consume.
         """
         return ()
 
