@@ -18,7 +18,7 @@ Setup
 ---
 
 ```
-python setup.py develop
+pip install dampr
 ```
 
 or
