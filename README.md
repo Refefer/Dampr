@@ -27,24 +27,6 @@ or
 python setup.py install
 ```
 
-Why not Dask for data processing?
----
-Dask is great!  I'd highly recommend it for fast analytics and datasets which don't need complex joins!
-
-However.
-
-Dask is really intended for in-memory computation and more analytics processing via interfaces like DataFrames.  While it does have a reasonable `bag` implementation for data processing, it's missing some important features such as joins across large datasets.  I have routinely run into OOM errors when processing datasets larger than memory when trying more complicated processes.
-
-In that sense, Dampr is attempting to bridge that gap of complex data processing on a single machine and heavy-weight systems, geared toward ease of use.
-
-Why not PySpark for data processing?
----
-PySpark is great!  I'd highly recommend it for extremely large datasets and cluster computation!
-
-However.
-
-PySpark requires large amounts of setup to really get going.  It's the antithesis of "light-weight" and really geared for large scale production deployments.  I personally don't like it for proof of concepts or one-offs; it requires just a bit too much tuning to get what you need.
-
 API
 ---
 [docs/dampr/index.html](http://htmlpreview.github.io/?https://github.com/Refefer/Dampr/blob/master/docs/dampr/index.html)
@@ -77,3 +59,23 @@ def main(fname):
 if __name__ == '__main__':
     main(sys.argv[1])
 ```
+
+Why not Dask for data processing?
+---
+Dask is great!  I'd highly recommend it for fast analytics and datasets which don't need complex joins!
+
+However.
+
+Dask is really intended for in-memory computation and more analytics processing via interfaces like DataFrames.  While it does have a reasonable `bag` implementation for data processing, it's missing some important features such as joins across large datasets.  I have routinely run into OOM errors when processing datasets larger than memory when trying more complicated processes.
+
+In that sense, Dampr is attempting to bridge that gap of complex data processing on a single machine and heavy-weight systems, geared toward ease of use.
+
+Why not PySpark for data processing?
+---
+PySpark is great!  I'd highly recommend it for extremely large datasets and cluster computation!
+
+However.
+
+PySpark requires large amounts of setup to really get going.  It's the antithesis of "light-weight" and really geared for large scale production deployments.  I personally don't like it for proof of concepts or one-offs; it requires just a bit too much tuning to get what you need.
+
+
