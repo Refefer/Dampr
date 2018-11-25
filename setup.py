@@ -13,8 +13,13 @@ setup(
     url="https://www.github.com/Refefer/Polymr",
     packages=find_packages(BASE),
     test_suite="tests",
-    scripts=[],
-    install_requires=[
-        "six"
-    ],
-    author='Andrew Stanton')
+    author='Andrew Stanton',
+    author_email="refefer@gmail.com",
+    classifiers=[
+       "Development Status :: 3 - Alpha",
+       "License :: OSI Approved :: Apache Software License",
+       "Programming Language :: Python :: 2",
+       "Programming Language :: Python :: 3",
+       "Operating System :: OS Independent"
+      ]
+    )
