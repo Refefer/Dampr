@@ -308,7 +308,7 @@ class PMap(PBase):
         """
         Sorts the results by a given key function.
         
-            Dampr.memory([1,2,3,4,5]).filter(lambda x: x % 2 == 1).sort_by(lambda x: -x).read()
+            >>> Dampr.memory([1,2,3,4,5]).filter(lambda x: x % 2 == 1).sort_by(lambda x: -x).read()
             [5, 3, 1]
         """
         def _sort_by(_key, value):
@@ -471,11 +471,11 @@ class PMap(PBase):
         def _cross(k1, v1, k2, v2):
             yield k1, cross(v2, v1)
 
-        pmer = self.checkpoint()
+        me = self.checkpoint()
         other = other.checkpoint()
-        pmer = Dampr(self.pmer.graph.union(other.pmer.graph))
-        name = 'Stage {}: (%s X %s)' % (self.source, other.source)
-        source, pmer = pmer._add_mapper([other.source, self.source], 
+        pmer = Dampr(me.pmer.graph.union(other.pmer.graph))
+        name = 'Stage {}: (%s X %s)' % (me.source, other.source)
+        source, pmer = pmer._add_mapper([other.source, me.source], 
                 MapCrossJoin(_cross, cache=memory), 
                 combiner=None,
                 name=name,

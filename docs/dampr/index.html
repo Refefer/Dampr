@@ -1204,10 +1204,11 @@ best utilized via it's DSL which provides higher level functionality for complex
         <span class="s2">&quot;BlockMapper&quot;</span><span class="p">,</span> <span class="s2">&quot;BlockReducer&quot;</span><span class="p">]</span>
 
 
-<span class="k">def</span> <span class="nf">setup_logging</span><span class="p">(</span><span class="n">loglevel</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">setup_logging</span><span class="p">(</span><span class="n">debug</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Convenience function for enabling logging</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">loglevel</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span> <span class="k">if</span> <span class="n">debug</span> <span class="k">else</span> <span class="n">logging</span><span class="o">.</span><span class="n">INFO</span>
     <span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">loglevel</span><span class="p">,</span>
                         <span class="n">format</span><span class="o">=</span><span class="s1">&#39;</span><span class="si">%(asctime)s</span><span class="s1"> </span><span class="si">%(levelname)s</span><span class="s1"> </span><span class="si">%(message)s</span><span class="s1">&#39;</span><span class="p">)</span>
 </pre></div>
@@ -2696,7 +2697,7 @@ and fuses them together into a single operation, speeding up many types of opera
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Sorts the results by a given key function.</span>
 <span class="sd">        </span>
-<span class="sd">            Dampr.memory([1,2,3,4,5]).filter(lambda x: x % 2 == 1).sort_by(lambda x: -x).read()</span>
+<span class="sd">            &gt;&gt;&gt; Dampr.memory([1,2,3,4,5]).filter(lambda x: x % 2 == 1).sort_by(lambda x: -x).read()</span>
 <span class="sd">            [5, 3, 1]</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">def</span> <span class="nf">_sort_by</span><span class="p">(</span><span class="n">_key</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
@@ -2859,11 +2860,11 @@ and fuses them together into a single operation, speeding up many types of opera
         <span class="k">def</span> <span class="nf">_cross</span><span class="p">(</span><span class="n">k1</span><span class="p">,</span> <span class="n">v1</span><span class="p">,</span> <span class="n">k2</span><span class="p">,</span> <span class="n">v2</span><span class="p">):</span>
             <span class="k">yield</span> <span class="n">k1</span><span class="p">,</span> <span class="n">cross</span><span class="p">(</span><span class="n">v2</span><span class="p">,</span> <span class="n">v1</span><span class="p">)</span>
 
-        <span class="n">pmer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">checkpoint</span><span class="p">()</span>
+        <span class="n">me</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">checkpoint</span><span class="p">()</span>
         <span class="n">other</span> <span class="o">=</span> <span class="n">other</span><span class="o">.</span><span class="n">checkpoint</span><span class="p">()</span>
-        <span class="n">pmer</span> <span class="o">=</span> <span class="n">Dampr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pmer</span><span class="o">.</span><span class="n">graph</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="n">other</span><span class="o">.</span><span class="n">pmer</span><span class="o">.</span><span class="n">graph</span><span class="p">))</span>
-        <span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;Stage {}: (</span><span class="si">%s</span><span class="s1"> X </span><span class="si">%s</span><span class="s1">)&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">source</span><span class="p">)</span>
-        <span class="n">source</span><span class="p">,</span> <span class="n">pmer</span> <span class="o">=</span> <span class="n">pmer</span><span class="o">.</span><span class="n">_add_mapper</span><span class="p">([</span><span class="n">other</span><span class="o">.</span><span class="n">source</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">],</span> 
+        <span class="n">pmer</span> <span class="o">=</span> <span class="n">Dampr</span><span class="p">(</span><span class="n">me</span><span class="o">.</span><span class="n">pmer</span><span class="o">.</span><span class="n">graph</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="n">other</span><span class="o">.</span><span class="n">pmer</span><span class="o">.</span><span class="n">graph</span><span class="p">))</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;Stage {}: (</span><span class="si">%s</span><span class="s1"> X </span><span class="si">%s</span><span class="s1">)&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">me</span><span class="o">.</span><span class="n">source</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">source</span><span class="p">)</span>
+        <span class="n">source</span><span class="p">,</span> <span class="n">pmer</span> <span class="o">=</span> <span class="n">pmer</span><span class="o">.</span><span class="n">_add_mapper</span><span class="p">([</span><span class="n">other</span><span class="o">.</span><span class="n">source</span><span class="p">,</span> <span class="n">me</span><span class="o">.</span><span class="n">source</span><span class="p">],</span> 
                 <span class="n">MapCrossJoin</span><span class="p">(</span><span class="n">_cross</span><span class="p">,</span> <span class="n">cache</span><span class="o">=</span><span class="n">memory</span><span class="p">),</span> 
                 <span class="n">combiner</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
                 <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
@@ -2919,7 +2920,7 @@ and fuses them together into a single operation, speeding up many types of opera
             
   <div class="item">
     <div class="name def" id="dampr.PMap.a_group_by">
-    <p>def <span class="ident">a_group_by</span>(</p><p>self, key, vf=&lt;function &lt;lambda&gt; at 0x7fd6c26ed938&gt;)</p>
+    <p>def <span class="ident">a_group_by</span>(</p><p>self, key, vf=&lt;function &lt;lambda&gt; at 0x7f6ae0381938&gt;)</p>
     </div>
     
 
@@ -3048,7 +3049,7 @@ the results of the computation:</p>
             
   <div class="item">
     <div class="name def" id="dampr.PMap.count">
-    <p>def <span class="ident">count</span>(</p><p>self, key=&lt;function &lt;lambda&gt; at 0x7fd6c26edc08&gt;, **options)</p>
+    <p>def <span class="ident">count</span>(</p><p>self, key=&lt;function &lt;lambda&gt; at 0x7f6ae0381c08&gt;, **options)</p>
     </div>
     
 
@@ -3116,11 +3117,11 @@ will cache the right dataset in memory, speeding up the computation significantl
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">def</span> <span class="nf">_cross</span><span class="p">(</span><span class="n">k1</span><span class="p">,</span> <span class="n">v1</span><span class="p">,</span> <span class="n">k2</span><span class="p">,</span> <span class="n">v2</span><span class="p">):</span>
         <span class="k">yield</span> <span class="n">k1</span><span class="p">,</span> <span class="n">cross</span><span class="p">(</span><span class="n">v2</span><span class="p">,</span> <span class="n">v1</span><span class="p">)</span>
-    <span class="n">pmer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">checkpoint</span><span class="p">()</span>
+    <span class="n">me</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">checkpoint</span><span class="p">()</span>
     <span class="n">other</span> <span class="o">=</span> <span class="n">other</span><span class="o">.</span><span class="n">checkpoint</span><span class="p">()</span>
-    <span class="n">pmer</span> <span class="o">=</span> <span class="n">Dampr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pmer</span><span class="o">.</span><span class="n">graph</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="n">other</span><span class="o">.</span><span class="n">pmer</span><span class="o">.</span><span class="n">graph</span><span class="p">))</span>
-    <span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;Stage {}: (</span><span class="si">%s</span><span class="s1"> X </span><span class="si">%s</span><span class="s1">)&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">source</span><span class="p">)</span>
-    <span class="n">source</span><span class="p">,</span> <span class="n">pmer</span> <span class="o">=</span> <span class="n">pmer</span><span class="o">.</span><span class="n">_add_mapper</span><span class="p">([</span><span class="n">other</span><span class="o">.</span><span class="n">source</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">],</span> 
+    <span class="n">pmer</span> <span class="o">=</span> <span class="n">Dampr</span><span class="p">(</span><span class="n">me</span><span class="o">.</span><span class="n">pmer</span><span class="o">.</span><span class="n">graph</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="n">other</span><span class="o">.</span><span class="n">pmer</span><span class="o">.</span><span class="n">graph</span><span class="p">))</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;Stage {}: (</span><span class="si">%s</span><span class="s1"> X </span><span class="si">%s</span><span class="s1">)&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">me</span><span class="o">.</span><span class="n">source</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">source</span><span class="p">)</span>
+    <span class="n">source</span><span class="p">,</span> <span class="n">pmer</span> <span class="o">=</span> <span class="n">pmer</span><span class="o">.</span><span class="n">_add_mapper</span><span class="p">([</span><span class="n">other</span><span class="o">.</span><span class="n">source</span><span class="p">,</span> <span class="n">me</span><span class="o">.</span><span class="n">source</span><span class="p">],</span> 
             <span class="n">MapCrossJoin</span><span class="p">(</span><span class="n">_cross</span><span class="p">,</span> <span class="n">cache</span><span class="o">=</span><span class="n">memory</span><span class="p">),</span> 
             <span class="n">combiner</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
             <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
@@ -3343,7 +3344,7 @@ flattening the results</p>
             
   <div class="item">
     <div class="name def" id="dampr.PMap.fold_by">
-    <p>def <span class="ident">fold_by</span>(</p><p>self, key, binop, value=&lt;function &lt;lambda&gt; at 0x7fd6c26eda28&gt;, **options)</p>
+    <p>def <span class="ident">fold_by</span>(</p><p>self, key, binop, value=&lt;function &lt;lambda&gt; at 0x7f6ae0381a28&gt;, **options)</p>
     </div>
     
 
@@ -3368,7 +3369,7 @@ flattening the results</p>
             
   <div class="item">
     <div class="name def" id="dampr.PMap.group_by">
-    <p>def <span class="ident">group_by</span>(</p><p>self, key, vf=&lt;function &lt;lambda&gt; at 0x7fd6c26ed848&gt;)</p>
+    <p>def <span class="ident">group_by</span>(</p><p>self, key, vf=&lt;function &lt;lambda&gt; at 0x7f6ae0381848&gt;)</p>
     </div>
     
 
@@ -3507,7 +3508,7 @@ collections together.</p></div>
             
   <div class="item">
     <div class="name def" id="dampr.PMap.mean">
-    <p>def <span class="ident">mean</span>(</p><p>self, key=&lt;function &lt;lambda&gt; at 0x7fd6c26edcf8&gt;, value=&lt;function &lt;lambda&gt; at 0x7fd6c26edd70&gt;, **options)</p>
+    <p>def <span class="ident">mean</span>(</p><p>self, key=&lt;function &lt;lambda&gt; at 0x7f6ae0381cf8&gt;, value=&lt;function &lt;lambda&gt; at 0x7f6ae0381d70&gt;, **options)</p>
     </div>
     
 
@@ -3845,8 +3846,14 @@ tab-delimited output, and sinks it to the provided path:</p>
     
   
     <div class="desc"><p>Sorts the results by a given key function.</p>
+<blockquote>
+<blockquote>
+<blockquote>
 <p>Dampr.memory([1,2,3,4,5]).filter(lambda x: x % 2 == 1).sort_by(lambda x: -x).read()
-[5, 3, 1]</p></div>
+[5, 3, 1]</p>
+</blockquote>
+</blockquote>
+</blockquote></div>
   <div class="source_cont">
   <p class="source_link"><a href="javascript:void(0);" onclick="toggle('source-dampr.PMap.sort_by', this);">Show source &equiv;</a></p>
   <div id="source-dampr.PMap.sort_by" class="source">
@@ -3854,7 +3861,7 @@ tab-delimited output, and sinks it to the provided path:</p>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Sorts the results by a given key function.</span>
 <span class="sd">    </span>
-<span class="sd">        Dampr.memory([1,2,3,4,5]).filter(lambda x: x % 2 == 1).sort_by(lambda x: -x).read()</span>
+<span class="sd">        &gt;&gt;&gt; Dampr.memory([1,2,3,4,5]).filter(lambda x: x % 2 == 1).sort_by(lambda x: -x).read()</span>
 <span class="sd">        [5, 3, 1]</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">def</span> <span class="nf">_sort_by</span><span class="p">(</span><span class="n">_key</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
@@ -4130,7 +4137,7 @@ By default, uses /tmp as temporary storage.</p>
             
   <div class="item">
     <div class="name def" id="dampr.PReduce.unique">
-    <p>def <span class="ident">unique</span>(</p><p>self, key=&lt;function &lt;lambda&gt; at 0x7fd6c26f0488&gt;)</p>
+    <p>def <span class="ident">unique</span>(</p><p>self, key=&lt;function &lt;lambda&gt; at 0x7f6ae0384488&gt;)</p>
     </div>
     
 

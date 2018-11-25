@@ -36,6 +36,8 @@ Examples
 
 Look at the `examples` directory for more complete examples.
 
+Similarly, the tests are intended to be fairly readable as well.  You can view them in the `tests` directory.
+
 ## Example - WC
 
 ```python

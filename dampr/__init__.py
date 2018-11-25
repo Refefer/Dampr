@@ -18,9 +18,10 @@ __all__ = ["Dampr", "PMap", "PReduce", "PJoin", "ARReduce",
         "BlockMapper", "BlockReducer"]
 
 
-def setup_logging(loglevel=logging.DEBUG):
+def setup_logging(debug=False):
     """
     Convenience function for enabling logging
     """
+    loglevel = logging.DEBUG if debug else logging.INFO
     logging.basicConfig(level=loglevel,
                         format='%(asctime)s %(levelname)s %(message)s')
