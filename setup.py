@@ -6,10 +6,14 @@ from distutils.core import setup
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 
+with open(os.path.join(BASE, "README.md")) as f:
+    long_description = f.read()
+
 setup(
     name='dampr',
-    version="0.1.2",
+    version="0.1.3",
     description="Data Processing implementation in Python",
+    long_description=long_description,
     url="https://www.github.com/Refefer/Dampr",
     packages=find_packages(BASE),
     test_suite="tests",
