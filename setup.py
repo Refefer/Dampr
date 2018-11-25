@@ -7,10 +7,10 @@ from distutils.core import setup
 BASE = os.path.dirname(os.path.abspath(__file__))
 
 setup(
-    name='polymr',
+    name='dampr',
     version="0.1.2",
     description="Data Processing implementation in Python",
-    url="https://www.github.com/Refefer/Polymr",
+    url="https://www.github.com/Refefer/Dampr",
     packages=find_packages(BASE),
     test_suite="tests",
     author='Andrew Stanton',

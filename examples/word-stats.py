@@ -2,14 +2,14 @@ import json
 import sys
 import logging
 
-from polymr import Polymr
+from dampr import Dampr
 
 def main(fname):
     logging.basicConfig(level=logging.INFO,
             format='%(asctime)s %(levelname)s %(message)s')
 
     # Share a root
-    words = Polymr.text(fname, 1024**2) \
+    words = Dampr.text(fname, 1024**2) \
             .flat_map(lambda line: line.split())
 
     # Most frequent words
@@ -37,7 +37,7 @@ def main(fname):
             .join(total_count) \
                 .reduce(lambda awl, tc: next(awl)[1] / float(next(tc)[1]))
 
-    tc, tw, wl, awl = Polymr.run(total_count, top_words, word_lengths, 
+    tc, tw, wl, awl = Dampr.run(total_count, top_words, word_lengths, 
             avg_word_lengths, name="word-stats")
 
     print()

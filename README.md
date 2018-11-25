@@ -1,7 +1,7 @@
-Polymr - Pure Python Data Processing
+Dampr - Pure Python Data Processing
 ===
 
-Polymr is intended for use as single machine data processing: it's natively out of core, supports map and reduce side joins, associative reduce combiners, and provides a high level interface for constructing Dataflow DAGs.
+Dampr is intended for use as single machine data processing: it's natively out of core, supports map and reduce side joins, associative reduce combiners, and provides a high level interface for constructing Dataflow DAGs.
 
 It's reasonably fast, easy to get started, and scales linearly by core.  It has no external dependencies, making it extremely lightweight and easy to install.  It has reasonable REPL support for data analysis, though there are better tools for the job for it.
 
@@ -35,7 +35,7 @@ However.
 
 Dask is really intended for in-memory computation and more analytics processing via interfaces like DataFrames.  While it does have a reasonable `bag` implementation for data processing, it's missing some important features such as joins across large datasets.  I have routinely run into OOM errors when processing datasets larger than memory when trying more complicated processes.
 
-In that sense, Polymr is attempting to bridge that gap of complex data processing on a single machine and heavy-weight systems, geared toward ease of use.
+In that sense, Dampr is attempting to bridge that gap of complex data processing on a single machine and heavy-weight systems, geared toward ease of use.
 
 Why not PySpark for data processing?
 ---
@@ -47,7 +47,7 @@ PySpark requires large amounts of setup to really get going.  It's the antithesi
 
 API
 ---
-[docs/polymr/index.html](http://htmlpreview.github.io/?https://github.com/Refefer/Polymr/blob/master/docs/polymr/index.html)
+[docs/polymr/index.html](http://htmlpreview.github.io/?https://github.com/Refefer/Dampr/blob/master/docs/polymr/index.html)
 
 Examples
 ---
@@ -59,11 +59,11 @@ Look at the `examples` directory for more complete examples.
 ```python
 import sys 
 
-from polymr import Polymr
+from dampr import Dampr
 
 def main(fname):
 
-    wc = Polymr.text(fname) \
+    wc = Dampr.text(fname) \
             .map(lambda v: len(v.split())) \
             .a_group_by(lambda x: 1) \
             .sum()

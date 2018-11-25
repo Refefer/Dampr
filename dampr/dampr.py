@@ -46,7 +46,7 @@ class ValueEmitter(object):
 
 class PBase(object):
     """
-    Base Polymr class
+    Base Dampr class
     """
     def __init__(self, source, pmer):
         assert isinstance(source, Source)
@@ -55,13 +55,13 @@ class PBase(object):
 
     def run(self, name=None, **kwargs):
         """
-        Evaluates the composed Polymr graph with the provided name and subsequent options.
+        Evaluates the composed Dampr graph with the provided name and subsequent options.
         By default, uses /tmp as temporary storage.
 
         Returns a ValueEmitter useful for shell access.
         """
         if name is None:
-            name = 'polymr/{}'.format(random.random())
+            name = 'dampr/{}'.format(random.random())
 
         logging.debug("run source: %s", self.source)
         ds = self.pmer.runner(name, self.pmer.graph, **kwargs).run([self.source])
@@ -116,14 +116,14 @@ class PMap(PBase):
         
     def checkpoint(self, force=False, combiner=None, options=None):
         """
-        Checkpoint forces Polymr to fuse all cached maps and add it as a MR stage.
+        Checkpoint forces Dampr to fuse all cached maps and add it as a MR stage.
 
         This is useful when sharing the results of a computation with multiple other graphs.
         
-        Without checkpoint(), Polymr would execute the shared graph multiple times rather than reuse
+        Without checkpoint(), Dampr would execute the shared graph multiple times rather than reuse
         the results of the computation:
 
-            >>> evens = Polymr.memory([1,2,3,4,5]).filter(lambda x: x % 2 == 0).checkpoint()
+            >>> evens = Dampr.memory([1,2,3,4,5]).filter(lambda x: x % 2 == 0).checkpoint()
             >>> summed = evens.group_by(lambda x: 1).sum()
             >>> multiplied = evens.group_by(lambda x: 1).reduce(lambda x, y: x * y)
 
@@ -151,8 +151,8 @@ class PMap(PBase):
         with other Mappers.  Similarly, the implementer needs to understand more of the
         nuances associated with keys.
 
-            >>> from polymr.base import Map
-            >>> Polymr.memory([1,2,3,4,5]).custom_mapper(Map(lambda k, x: [(k, x+1)])).read()
+            >>> from dampr.base import Map
+            >>> Dampr.memory([1,2,3,4,5]).custom_mapper(Map(lambda k, x: [(k, x+1)])).read()
             [2, 3, 4, 5, 6]
         """
         assert isinstance(mapper, Mapper)
@@ -171,7 +171,7 @@ class PMap(PBase):
         This is a very powerful, low-level interface which should be avoided when possible
         as it's easy to write bugs.
 
-            >>> Polymr.memory([1,2,3,4,5]).custom_reducer(Reduce(lambda k, x: [(k, sum(x))])).read()
+            >>> Dampr.memory([1,2,3,4,5]).custom_reducer(Reduce(lambda k, x: [(k, sum(x))])).read()
             [[(0, 1)], [(1, 2)], [(2, 3)], [(3, 4)], [(4, 5)]]
         """
         assert isinstance(reducer, Reducer)
@@ -198,7 +198,7 @@ class PMap(PBase):
             ...   for num in items:
             ...     yield num, num + 1
             ...
-            >>> Polymr.memory([1,2,3,4,5]).partition_map(plus_one).read()
+            >>> Dampr.memory([1,2,3,4,5]).partition_map(plus_one).read()
             [2, 3, 4, 5, 6]
 
         """
@@ -217,7 +217,7 @@ class PMap(PBase):
             ...       largest = max(largest, value)
             ...   yield "Largest", largest
             ...
-            >>> Polymr.memory([1,2,3,4,5]).partition_reduce(largest_number).read(n_partitions=1)
+            >>> Dampr.memory([1,2,3,4,5]).partition_reduce(largest_number).read(n_partitions=1)
             [('Largest', 5)]
         """
         return self.custom_reducer(StreamReducer(f))
@@ -227,7 +227,7 @@ class PMap(PBase):
         Maps elements in the underlying collection using function 
         `f`:
 
-            >>> Polymr.memory([1,2,3,4,5]).map(lambda x: x + 1).read()
+            >>> Dampr.memory([1,2,3,4,5]).map(lambda x: x + 1).read()
             [2, 3, 4, 5, 6]
         """
         def _map(k, v):
@@ -240,7 +240,7 @@ class PMap(PBase):
         Filters items from a collection based on a predicate f.
         A predicate return True keeps the item.
 
-            >>> Polymr.memory([1,2,3,4,5]).filter(lambda x: x % 2 == 1).read()
+            >>> Dampr.memory([1,2,3,4,5]).filter(lambda x: x % 2 == 1).read()
             [1, 3, 5]
 
         """
@@ -255,7 +255,7 @@ class PMap(PBase):
         Maps elements in the underlying collection using function f, 
         flattening the results
 
-            >>> Polymr.memory([1,2,3,4,5]).flat_map(range).read()
+            >>> Dampr.memory([1,2,3,4,5]).flat_map(range).read()
             [0, 0, 1, 0, 1, 2, 0, 1, 2, 3, 0, 1, 2, 3, 4]
         """
         def _flat_map(k, v):
@@ -269,7 +269,7 @@ class PMap(PBase):
         Groups a collections of X by a key function, optionally mapping X to Y 
         using `vf`.  Returns a Reducer object for different types of aggregations
 
-            >>> Polymr.memory([1,2,3,4,5]).group_by(lambda x: x % 2).reduce(lambda k, it: sum(it)).read()
+            >>> Dampr.memory([1,2,3,4,5]).group_by(lambda x: x % 2).reduce(lambda k, it: sum(it)).read()
             [(0, 6), (1, 9)]
         """
         def _group_by(_key, value):
@@ -282,13 +282,13 @@ class PMap(PBase):
         """
         Groups a collection of X by a key function and optionally mapping X to Y
         using `vf`.  It differs from `group_by` by requiring an associative reduction
-        operator: by forcing this restriction, Polymr is able to perform a partial 
+        operator: by forcing this restriction, Dampr is able to perform a partial 
         reduction of the collection during the mapping sequence which can dramatically
         speed up the performace of the reduce stage.
 
         When possible, use a_group_by over the more general group_by.
 
-            >>> Polymr.memory([1,2,3,4,5]).a_group_by(lambda x: x % 2).reduce(lambda x, y: x+y).read()
+            >>> Dampr.memory([1,2,3,4,5]).a_group_by(lambda x: x % 2).reduce(lambda x, y: x+y).read()
             [(0, 6), (1, 9)]
         """
         def _a_group_by(_key, value):
@@ -308,7 +308,7 @@ class PMap(PBase):
         """
         Sorts the results by a given key function.
         
-            Polymr.memory([1,2,3,4,5]).filter(lambda x: x % 2 == 1).sort_by(lambda x: -x).read()
+            Dampr.memory([1,2,3,4,5]).filter(lambda x: x % 2 == 1).sort_by(lambda x: -x).read()
             [5, 3, 1]
         """
         def _sort_by(_key, value):
@@ -320,7 +320,7 @@ class PMap(PBase):
         """
         Joins two independent computations, returning a Joining class.
 
-        This is a powerful and expensive operation which can merge two Polymr 
+        This is a powerful and expensive operation which can merge two Dampr 
         collections together.
         """
         assert isinstance(other, PBase)
@@ -328,7 +328,7 @@ class PMap(PBase):
         if isinstance(other, PMap):
             other = other.checkpoint(True)
 
-        pmer = Polymr(me.pmer.graph.union(other.pmer.graph))
+        pmer = Dampr(me.pmer.graph.union(other.pmer.graph))
         return PJoin(me.source, pmer, other.source)
 
     def count(self, key=lambda x: x, **options):
@@ -336,7 +336,7 @@ class PMap(PBase):
         Counts each item X in the collection by its key 
         function.
 
-            >>> Polymr.memory([1,2,3,4,5]).count(lambda x: x % 2).read()
+            >>> Dampr.memory([1,2,3,4,5]).count(lambda x: x % 2).read()
             [(0, 2), (1, 3)]
         """
         return self.a_group_by(key, lambda v: 1) \
@@ -348,7 +348,7 @@ class PMap(PBase):
         mapped by a value function:
 
             >>> ages = [("Andrew", 33), ("Alice", 42), ("Andrew", 12), ("Bob", 51)]
-            >>> Polymr.memory(ages).mean(lambda x: x[0], lambda v: v[1]).read()
+            >>> Dampr.memory(ages).mean(lambda x: x[0], lambda v: v[1]).read()
             [('Alice', 42.0), ('Andrew', 22.5), ('Bob', 51.0)]
         """
         def _mean_binop(x, y):
@@ -384,7 +384,7 @@ class PMap(PBase):
         useful for small datasets to gain extra performance in subsequent 
         computations.
 
-            >>> Polymr.memory([1,2,3,4,5,6]).mean(lambda x: x % 2).cached().read()
+            >>> Dampr.memory([1,2,3,4,5,6]).mean(lambda x: x % 2).cached().read()
             [(0, 4.0), (1, 3.0)]
         """
         # Run the pipeline, load it into memory, and create a new graph
@@ -398,7 +398,7 @@ class PMap(PBase):
         directory as partitions.  Sink assumes each X in the collection is 
         already a unicode string.
 
-            >>> Polymr.memory(["foo", "bar", "baz"]).sink("/tmp/foo").run()
+            >>> Dampr.memory(["foo", "bar", "baz"]).sink("/tmp/foo").run()
             >>> open("/tmp/foo/0").read()
             >>> open("/tmp/foo/1").read()
             >>> open("/tmp/foo/2").read()
@@ -418,7 +418,7 @@ class PMap(PBase):
         A convenience function which takes a tuple or list, creates a simple
         tab-delimited output, and sinks it to the provided path:
 
-            >>> Polymr.memory([("Hank Aaron", 755)]).sink_tsv("/tmp/foo").run()
+            >>> Dampr.memory([("Hank Aaron", 755)]).sink_tsv("/tmp/foo").run()
             >>> open("/tmp/foo/0").read()
         """
         return self.map(lambda x: u'\t'.join(unicode(p) for p in x)).sink(path)
@@ -428,7 +428,7 @@ class PMap(PBase):
         A convenience function which takes a simple python object and serializes
         it to a line-delimited json to the given path:
 
-            >>> Polymr.memory([{"name": "Hank Aaron", "home runs": 755}]).sink_json("/tmp/foo").run()
+            >>> Dampr.memory([{"name": "Hank Aaron", "home runs": 755}]).sink_json("/tmp/foo").run()
             >>> open("/tmp/foo/0").read()
         """
         return self.map(json.dumps).sink(path)
@@ -444,8 +444,8 @@ class PMap(PBase):
 
         Two items, Xi and Yi, are joined with the cross function.
 
-            >>> left = Polymr.memory([1,2,3,4,5])
-            >>> right = Polymr.memory(['foo', 'bar'])
+            >>> left = Dampr.memory([1,2,3,4,5])
+            >>> right = Dampr.memory(['foo', 'bar'])
             >>> left.cross_right(right, lambda x, y: (x, y)).read()
             [(1, 'foo'), (1, 'bar'), (2, 'foo'), (2, 'bar'), (3, 'foo'), (3, 'bar'), (4, 'foo'), (4, 'bar'), (5, 'foo'), (5, 'bar')]
         """
@@ -463,8 +463,8 @@ class PMap(PBase):
 
         Two items, Xi and Yi, are joined with the cross function.
 
-            >>> left = Polymr.memory([1,2,3,4,5])
-            >>> right = Polymr.memory(['foo', 'bar'])
+            >>> left = Dampr.memory([1,2,3,4,5])
+            >>> right = Dampr.memory(['foo', 'bar'])
             >>> left.cross_left(right, lambda x, y: (x, y)).read()
             [(1, 'foo'), (2, 'foo'), (3, 'foo'), (4, 'foo'), (5, 'foo'), (1, 'bar'), (2, 'bar'), (3, 'bar'), (4, 'bar'), (5, 'bar')]
         """
@@ -473,7 +473,7 @@ class PMap(PBase):
 
         pmer = self.checkpoint()
         other = other.checkpoint()
-        pmer = Polymr(self.pmer.graph.union(other.pmer.graph))
+        pmer = Dampr(self.pmer.graph.union(other.pmer.graph))
         name = 'Stage {}: (%s X %s)' % (self.source, other.source)
         source, pmer = pmer._add_mapper([other.source, self.source], 
                 MapCrossJoin(_cross, cache=memory), 
@@ -496,14 +496,14 @@ class ARReduce(object):
         in the reduce stage.  It is often substantially faster than the more
         general group_by.
 
-        `reduce_buffer` is a constant which tells Polymr how much temporary storage
-        to keep in memory on the map side reductions.  For example with `1000`, Polymr
+        `reduce_buffer` is a constant which tells Dampr how much temporary storage
+        to keep in memory on the map side reductions.  For example with `1000`, Dampr
         will keep 1000 unique keys in memory.  In the case where a new key would spill
-        over the buffer size, Polymr will flush the buffer to disk and create a new
+        over the buffer size, Dampr will flush the buffer to disk and create a new
         buffer.  By increasing the `reduce_buffer`, you can increase efficiency while
         sacrificing memory.
 
-            >>> Polymr.memory([1,2,3,4,5]).a_group_by(lambda x: 1).reduce(lambda x, y: x + y).read()
+            >>> Dampr.memory([1,2,3,4,5]).a_group_by(lambda x: 1).reduce(lambda x, y: x + y).read()
             [(1, 15)]
         """
         def _reduce(key, vs):
@@ -524,7 +524,7 @@ class ARReduce(object):
     def first(self, **options):
         """
         Returns the first item found for a given key. 
-            >>> Polymr.memory([1,2,3,4,5]).a_group_by(lambda x: x % 2).first().read()
+            >>> Dampr.memory([1,2,3,4,5]).a_group_by(lambda x: x % 2).first().read()
             [(0, 2), (1, 1)]
         """
         return self.reduce(lambda x, _y: x, **options)
@@ -533,7 +533,7 @@ class ARReduce(object):
         """
         Simple sum of values by key.
 
-            >>> Polymr.memory([1,2,3,4,5]).a_group_by(lambda x: x % 2).sum().read()
+            >>> Dampr.memory([1,2,3,4,5]).a_group_by(lambda x: x % 2).sum().read()
             [(0, 6), (1, 9)]
         """
         return self.reduce(lambda x, y: x + y, **options)
@@ -549,7 +549,7 @@ class PReduce(PBase):
         Reduces a grouped set of items by f, which takes two arguments: the group key
         and an iterator lazily yield all items in the group.
 
-            >>> Polymr.memory([1,2,3,4,5]).group_by(lambda x: x % 2).reduce(lambda k, it: sum(it)).read()
+            >>> Dampr.memory([1,2,3,4,5]).group_by(lambda x: x % 2).reduce(lambda k, it: sum(it)).read()
             [(0, 6), (1, 9)]
         """
         new_source, pmer = self.pmer._add_reducer([self.source], KeyedReduce(f))
@@ -560,7 +560,7 @@ class PReduce(PBase):
         Returns the unique set of items in the grouping.
 
             >>> names = [("Andrew", 1), ("Andrew", 1), ("Andrew", 2), ("Becky", 13)]
-            >>> Polymr.memory(names).group_by(lambda x: x[0], lambda x: x[1]).unique().read()
+            >>> Dampr.memory(names).group_by(lambda x: x[0], lambda x: x[1]).unique().read()
             [('Andrew', [1, 2]), ('Becky', [13])]
         """
         def _uniq(k, it):
@@ -584,7 +584,7 @@ class PReduce(PBase):
         if isinstance(other, PMap):
             other = other.checkpoint(True)
 
-        pmer = Polymr(self.pmer.graph.union(other.pmer.graph))
+        pmer = Dampr(self.pmer.graph.union(other.pmer.graph))
         return PJoin(self.source, pmer, other.source)
 
     def partition_reduce(self, f):
@@ -618,8 +618,8 @@ class PJoin(PBase):
         will be provied two arguments: the left iterator and the right iterator.
 
 
-            >>> left = Polymr.memory([("foo", 13), ("bar", 14)]).group_by(lambda x: x[0])
-            >>> right = Polymr.memory([("bar", "baller"), ("baz", "bag")]).group_by(lambda x: x[0])
+            >>> left = Dampr.memory([("foo", 13), ("bar", 14)]).group_by(lambda x: x[0])
+            >>> right = Dampr.memory([("bar", "baller"), ("baz", "bag")]).group_by(lambda x: x[0])
             >>> left.join(right).reduce(lambda lit, rit: (list(lit), list(rit))).read()
             [('bar', ([('bar', 14)], [('bar', 'baller')]))]
 
@@ -642,8 +642,8 @@ class PJoin(PBase):
         is missing the join key, it will call the aggregate function with an empty
         iterator.
 
-            >>> left = Polymr.memory([("foo", 13), ("bar", 14)]).group_by(lambda x: x[0])
-            >>> right = Polymr.memory([("bar", "baller"), ("baz", "bag")]).group_by(lambda x: x[0])
+            >>> left = Dampr.memory([("foo", 13), ("bar", 14)]).group_by(lambda x: x[0])
+            >>> right = Dampr.memory([("bar", "baller"), ("baz", "bag")]).group_by(lambda x: x[0])
             >>> left.join(right).left_reduce(lambda lit, rit: (list(lit), list(rit))).read()
             [('bar', ([('bar', 14)], [('bar', 'baller')])), ('foo', ([('foo', 13)], []))]
         """
@@ -663,9 +663,9 @@ class PJoin(PBase):
 
         return PMap(source, pmer).map(lambda x: x[1])
 
-class Polymr(object):
+class Dampr(object):
     """
-    Entrypoint into the Polymr processing functions.
+    Entrypoint into the Dampr processing functions.
     """
     def __init__(self, graph=None, runner=None):
         if graph is None:
@@ -683,16 +683,16 @@ class Polymr(object):
         Create an in-memory dataset from the provided items.  `partitions` define how
         many initial functions there will be.
 
-            >>> Polymr.memory([1,2,3,4,5])
+            >>> Dampr.memory([1,2,3,4,5])
         """
         mi = MemoryInput(list(enumerate(items)), partitions)
         source, ng = Graph().add_input(mi)
-        return PMap(source, Polymr(ng))
+        return PMap(source, Dampr(ng))
 
     @classmethod
     def text(cls, fname, chunk_size=16*1024**2):
         """
-        Reads a file or directory of files into Polymr.  Each record is assumed to 
+        Reads a file or directory of files into Dampr.  Each record is assumed to 
         be newline delimited.  
 
         When fname is a directory, it will walk the directory, collecting all
@@ -702,7 +702,7 @@ class Polymr(object):
 
         Returns a PMap object.
 
-            >>> Polymr.text('/tmp', chunk_size=64*1024**2)
+            >>> Dampr.text('/tmp', chunk_size=64*1024**2)
         """
         if os.path.isdir(fname):
             inp = DirectoryInput(fname, chunk_size)
@@ -710,7 +710,7 @@ class Polymr(object):
             inp = TextInput(fname, chunk_size)
 
         source, ng = Graph().add_input(inp)
-        return PMap(source, Polymr(ng))
+        return PMap(source, Dampr(ng))
 
     @classmethod
     def json(cls, *args, **kwargs):
@@ -722,21 +722,21 @@ class Polymr(object):
     @classmethod
     def from_dataset(cls, dataset):
         """
-        Typically not used, this will read the raw outputs of a Polymr stage 
+        Typically not used, this will read the raw outputs of a Dampr stage 
         as an input.
         """
         assert isinstance(dataset, Chunker)
         source, ng = Graph().add_input(dataset)
-        return PMap(source, Polymr(ng))
+        return PMap(source, Dampr(ng))
 
     @classmethod
     def run(self, *pmers, **kwargs):
         """
         Runs a graph or set of graphs.
 
-            >>> foo = Polymr.memory([1,2,3,4,5])
-            >>> bar = Polymr.memory([6,7,8,9,10])
-            >>> left, right = Polymr.run(foo, bar)
+            >>> foo = Dampr.memory([1,2,3,4,5])
+            >>> bar = Dampr.memory([6,7,8,9,10])
+            >>> left, right = Dampr.run(foo, bar)
             >>> left.read()
             [1, 2, 3, 4, 5]
             >>> right.read()
@@ -757,21 +757,21 @@ class Polymr(object):
 
             sources.append(pmer.source)
 
-        name = kwargs.pop('name', 'polymr/{}'.format(random.random()))
+        name = kwargs.pop('name', 'dampr/{}'.format(random.random()))
         ds = pmer.pmer.runner(name, graph, **kwargs).run(sources)
         return [ValueEmitter(d) for d in ds]
 
     def _add_mapper(self, *args, **kwargs): 
         output, ng = self.graph.add_mapper(*args, **kwargs)
-        return output, Polymr(ng)
+        return output, Dampr(ng)
 
     def _add_reducer(self, *args, **kwargs): 
         output, ng = self.graph.add_reducer(*args, **kwargs)
-        return output, Polymr(ng)
+        return output, Dampr(ng)
 
     def _add_sink(self, *args, **kwargs): 
         output, ng = self.graph.add_sink(*args, **kwargs)
-        return output, Polymr(ng)
+        return output, Dampr(ng)
 
 def fuse(aggs):
     if len(aggs) == 1:
