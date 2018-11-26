@@ -1130,6 +1130,7 @@ table {
     <li class="mono"><a href="#dampr.PMap.group_by">group_by</a></li>
     <li class="mono"><a href="#dampr.PMap.inspect">inspect</a></li>
     <li class="mono"><a href="#dampr.PMap.join">join</a></li>
+    <li class="mono"><a href="#dampr.PMap.len">len</a></li>
     <li class="mono"><a href="#dampr.PMap.map">map</a></li>
     <li class="mono"><a href="#dampr.PMap.mean">mean</a></li>
     <li class="mono"><a href="#dampr.PMap.partition_map">partition_map</a></li>
@@ -2520,7 +2521,7 @@ and fuses them together into a single operation, speeding up many types of opera
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">agg</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">force</span><span class="p">:</span>
             <span class="n">aggs</span> <span class="o">=</span> <span class="p">[</span><span class="n">Map</span><span class="p">(</span><span class="n">_identity</span><span class="p">)]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">agg</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">agg</span><span class="p">[:]</span>
             <span class="n">name</span> <span class="o">=</span> <span class="s1">&#39; -&gt; &#39;</span> <span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s1">&#39;{}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">mapper</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">aggs</span><span class="p">)</span>
-            <span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;Stage {}: </span><span class="si">%s</span><span class="s1"> =&gt; </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+            <span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;Stage {}: </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">name</span><span class="p">)</span>
             <span class="n">source</span><span class="p">,</span> <span class="n">pmer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pmer</span><span class="o">.</span><span class="n">_add_mapper</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">],</span> 
                     <span class="n">Map</span><span class="p">(</span><span class="n">fuse</span><span class="p">(</span><span class="n">aggs</span><span class="p">)),</span> 
                     <span class="n">combiner</span><span class="o">=</span><span class="n">combiner</span><span class="p">,</span>
@@ -2579,6 +2580,9 @@ and fuses them together into a single operation, speeding up many types of opera
 <span class="sd">        a partition.  This can be used for creating custom logic in mappers for the sake</span>
 <span class="sd">        of performance or additional functionality.</span>
 
+<span class="sd">        Note: partition_map will still execute even if the partition is empty!  Make sure</span>
+<span class="sd">        the logic handles empty sets!</span>
+
 <span class="sd">        `f` is a function that takes in an iterator of items in the partition and yields </span>
 <span class="sd">        out group keys and new values.</span>
 
@@ -2599,6 +2603,9 @@ and fuses them together into a single operation, speeding up many types of opera
 <span class="sd">        during reductions.  It can be useful in certain cases where reductions over sets</span>
 <span class="sd">        of reduced values is convenient, such as returning only the top K items in a dataset</span>
 
+<span class="sd">        Note: `partition_reduce` will still execute on empty partitions!  Make sure the</span>
+<span class="sd">        logic handles cases where a partition is empty!</span>
+
 <span class="sd">            &gt;&gt;&gt; def largest_number(it):</span>
 <span class="sd">            ...   largest = float(&#39;-inf&#39;)</span>
 <span class="sd">            ...   for group_key, its in it:</span>
@@ -2610,6 +2617,38 @@ and fuses them together into a single operation, speeding up many types of opera
 <span class="sd">            [(&#39;Largest&#39;, 5)]</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">custom_reducer</span><span class="p">(</span><span class="n">StreamReducer</span><span class="p">(</span><span class="n">f</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">len</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Counts the number of items in the </span>
+<span class="sd">	collection.</span>
+
+<span class="sd">	    &gt;&gt;&gt; Dampr.memory([1,2,3,4,5]).len().read()</span>
+<span class="sd">	    [5]</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">def</span> <span class="nf">_map_count</span><span class="p">(</span><span class="n">items</span><span class="p">):</span>
+            <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">items</span><span class="p">:</span>
+                <span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span>
+
+            <span class="k">yield</span> <span class="mi">1</span><span class="p">,</span> <span class="n">count</span>
+
+        <span class="k">def</span> <span class="nf">_reduce_count</span><span class="p">(</span><span class="n">groups</span><span class="p">):</span>
+            <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="n">not_empty</span> <span class="o">=</span> <span class="bp">False</span>
+            <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">counts</span> <span class="ow">in</span> <span class="n">groups</span><span class="p">:</span>
+                <span class="n">not_empty</span> <span class="o">=</span> <span class="bp">True</span>
+                <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">counts</span><span class="p">:</span>
+                    <span class="n">count</span> <span class="o">+=</span> <span class="n">c</span>
+
+            <span class="k">if</span> <span class="n">not_empty</span><span class="p">:</span>
+                <span class="k">yield</span> <span class="mi">1</span><span class="p">,</span> <span class="n">count</span>
+
+        <span class="k">return</span> <span class="bp">self</span> \
+                <span class="o">.</span><span class="n">partition_map</span><span class="p">(</span><span class="n">_map_count</span><span class="p">)</span> \
+                <span class="o">.</span><span class="n">partition_reduce</span><span class="p">(</span><span class="n">_reduce_count</span><span class="p">)</span> \
+                <span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
 
     <span class="k">def</span> <span class="nf">map</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">f</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -2794,7 +2833,7 @@ and fuses them together into a single operation, speeding up many types of opera
 <span class="sd">    &quot;&quot;&quot;</span>
         <span class="n">aggs</span> <span class="o">=</span> <span class="p">[</span><span class="n">Map</span><span class="p">(</span><span class="n">_identity</span><span class="p">)]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">agg</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">agg</span><span class="p">[:]</span>
         <span class="n">name</span> <span class="o">=</span> <span class="s1">&#39; -&gt; &#39;</span> <span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s1">&#39;{}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">mapper</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">aggs</span><span class="p">)</span>
-        <span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;Stage {}: </span><span class="si">%s</span><span class="s1"> =&gt; </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;Stage {}: </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">name</span><span class="p">)</span>
         <span class="n">source</span><span class="p">,</span> <span class="n">pmer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pmer</span><span class="o">.</span><span class="n">_add_sink</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">],</span> 
                 <span class="n">Map</span><span class="p">(</span><span class="n">fuse</span><span class="p">(</span><span class="n">aggs</span><span class="p">)),</span> 
                 <span class="n">path</span><span class="o">=</span><span class="n">path</span><span class="p">,</span>
@@ -2863,7 +2902,7 @@ and fuses them together into a single operation, speeding up many types of opera
         <span class="n">me</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">checkpoint</span><span class="p">()</span>
         <span class="n">other</span> <span class="o">=</span> <span class="n">other</span><span class="o">.</span><span class="n">checkpoint</span><span class="p">()</span>
         <span class="n">pmer</span> <span class="o">=</span> <span class="n">Dampr</span><span class="p">(</span><span class="n">me</span><span class="o">.</span><span class="n">pmer</span><span class="o">.</span><span class="n">graph</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="n">other</span><span class="o">.</span><span class="n">pmer</span><span class="o">.</span><span class="n">graph</span><span class="p">))</span>
-        <span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;Stage {}: (</span><span class="si">%s</span><span class="s1"> X </span><span class="si">%s</span><span class="s1">)&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">me</span><span class="o">.</span><span class="n">source</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">source</span><span class="p">)</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;Stage {}: Cross&#39;</span>
         <span class="n">source</span><span class="p">,</span> <span class="n">pmer</span> <span class="o">=</span> <span class="n">pmer</span><span class="o">.</span><span class="n">_add_mapper</span><span class="p">([</span><span class="n">other</span><span class="o">.</span><span class="n">source</span><span class="p">,</span> <span class="n">me</span><span class="o">.</span><span class="n">source</span><span class="p">],</span> 
                 <span class="n">MapCrossJoin</span><span class="p">(</span><span class="n">_cross</span><span class="p">,</span> <span class="n">cache</span><span class="o">=</span><span class="n">memory</span><span class="p">),</span> 
                 <span class="n">combiner</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
@@ -2920,7 +2959,7 @@ and fuses them together into a single operation, speeding up many types of opera
             
   <div class="item">
     <div class="name def" id="dampr.PMap.a_group_by">
-    <p>def <span class="ident">a_group_by</span>(</p><p>self, key, vf=&lt;function &lt;lambda&gt; at 0x7f6ae0381938&gt;)</p>
+    <p>def <span class="ident">a_group_by</span>(</p><p>self, key, vf=&lt;function &lt;lambda&gt; at 0x7f368f19db18&gt;)</p>
     </div>
     
 
@@ -3031,7 +3070,7 @@ the results of the computation:</p>
     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">agg</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">force</span><span class="p">:</span>
         <span class="n">aggs</span> <span class="o">=</span> <span class="p">[</span><span class="n">Map</span><span class="p">(</span><span class="n">_identity</span><span class="p">)]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">agg</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">agg</span><span class="p">[:]</span>
         <span class="n">name</span> <span class="o">=</span> <span class="s1">&#39; -&gt; &#39;</span> <span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s1">&#39;{}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">mapper</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">aggs</span><span class="p">)</span>
-        <span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;Stage {}: </span><span class="si">%s</span><span class="s1"> =&gt; </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;Stage {}: </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">name</span><span class="p">)</span>
         <span class="n">source</span><span class="p">,</span> <span class="n">pmer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pmer</span><span class="o">.</span><span class="n">_add_mapper</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">],</span> 
                 <span class="n">Map</span><span class="p">(</span><span class="n">fuse</span><span class="p">(</span><span class="n">aggs</span><span class="p">)),</span> 
                 <span class="n">combiner</span><span class="o">=</span><span class="n">combiner</span><span class="p">,</span>
@@ -3049,7 +3088,7 @@ the results of the computation:</p>
             
   <div class="item">
     <div class="name def" id="dampr.PMap.count">
-    <p>def <span class="ident">count</span>(</p><p>self, key=&lt;function &lt;lambda&gt; at 0x7f6ae0381c08&gt;, **options)</p>
+    <p>def <span class="ident">count</span>(</p><p>self, key=&lt;function &lt;lambda&gt; at 0x7f368f19dde8&gt;, **options)</p>
     </div>
     
 
@@ -3120,7 +3159,7 @@ will cache the right dataset in memory, speeding up the computation significantl
     <span class="n">me</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">checkpoint</span><span class="p">()</span>
     <span class="n">other</span> <span class="o">=</span> <span class="n">other</span><span class="o">.</span><span class="n">checkpoint</span><span class="p">()</span>
     <span class="n">pmer</span> <span class="o">=</span> <span class="n">Dampr</span><span class="p">(</span><span class="n">me</span><span class="o">.</span><span class="n">pmer</span><span class="o">.</span><span class="n">graph</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="n">other</span><span class="o">.</span><span class="n">pmer</span><span class="o">.</span><span class="n">graph</span><span class="p">))</span>
-    <span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;Stage {}: (</span><span class="si">%s</span><span class="s1"> X </span><span class="si">%s</span><span class="s1">)&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">me</span><span class="o">.</span><span class="n">source</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">source</span><span class="p">)</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;Stage {}: Cross&#39;</span>
     <span class="n">source</span><span class="p">,</span> <span class="n">pmer</span> <span class="o">=</span> <span class="n">pmer</span><span class="o">.</span><span class="n">_add_mapper</span><span class="p">([</span><span class="n">other</span><span class="o">.</span><span class="n">source</span><span class="p">,</span> <span class="n">me</span><span class="o">.</span><span class="n">source</span><span class="p">],</span> 
             <span class="n">MapCrossJoin</span><span class="p">(</span><span class="n">_cross</span><span class="p">,</span> <span class="n">cache</span><span class="o">=</span><span class="n">memory</span><span class="p">),</span> 
             <span class="n">combiner</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
@@ -3344,7 +3383,7 @@ flattening the results</p>
             
   <div class="item">
     <div class="name def" id="dampr.PMap.fold_by">
-    <p>def <span class="ident">fold_by</span>(</p><p>self, key, binop, value=&lt;function &lt;lambda&gt; at 0x7f6ae0381a28&gt;, **options)</p>
+    <p>def <span class="ident">fold_by</span>(</p><p>self, key, binop, value=&lt;function &lt;lambda&gt; at 0x7f368f19dc08&gt;, **options)</p>
     </div>
     
 
@@ -3369,7 +3408,7 @@ flattening the results</p>
             
   <div class="item">
     <div class="name def" id="dampr.PMap.group_by">
-    <p>def <span class="ident">group_by</span>(</p><p>self, key, vf=&lt;function &lt;lambda&gt; at 0x7f6ae0381848&gt;)</p>
+    <p>def <span class="ident">group_by</span>(</p><p>self, key, vf=&lt;function &lt;lambda&gt; at 0x7f368f19da28&gt;)</p>
     </div>
     
 
@@ -3473,6 +3512,55 @@ collections together.</p></div>
   
             
   <div class="item">
+    <div class="name def" id="dampr.PMap.len">
+    <p>def <span class="ident">len</span>(</p><p>self)</p>
+    </div>
+    
+
+    
+  
+    <div class="desc"><p>Counts the number of items in the 
+collection.</p>
+<div class="codehilite"><pre><span></span>&gt;&gt;&gt; Dampr.memory([1,2,3,4,5]).len().read()
+[5]
+</pre></div></div>
+  <div class="source_cont">
+  <p class="source_link"><a href="javascript:void(0);" onclick="toggle('source-dampr.PMap.len', this);">Show source &equiv;</a></p>
+  <div id="source-dampr.PMap.len" class="source">
+    <div class="codehilite"><pre><span></span><span class="k">def</span> <span class="nf">len</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Counts the number of items in the </span>
+<span class="sd">lection.</span>
+<span class="sd"> &gt;&gt;&gt; Dampr.memory([1,2,3,4,5]).len().read()</span>
+<span class="sd"> [5]</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">_map_count</span><span class="p">(</span><span class="n">items</span><span class="p">):</span>
+        <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">items</span><span class="p">:</span>
+            <span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">yield</span> <span class="mi">1</span><span class="p">,</span> <span class="n">count</span>
+    <span class="k">def</span> <span class="nf">_reduce_count</span><span class="p">(</span><span class="n">groups</span><span class="p">):</span>
+        <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">not_empty</span> <span class="o">=</span> <span class="bp">False</span>
+        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">counts</span> <span class="ow">in</span> <span class="n">groups</span><span class="p">:</span>
+            <span class="n">not_empty</span> <span class="o">=</span> <span class="bp">True</span>
+            <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">counts</span><span class="p">:</span>
+                <span class="n">count</span> <span class="o">+=</span> <span class="n">c</span>
+        <span class="k">if</span> <span class="n">not_empty</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="mi">1</span><span class="p">,</span> <span class="n">count</span>
+    <span class="k">return</span> <span class="bp">self</span> \
+            <span class="o">.</span><span class="n">partition_map</span><span class="p">(</span><span class="n">_map_count</span><span class="p">)</span> \
+            <span class="o">.</span><span class="n">partition_reduce</span><span class="p">(</span><span class="n">_reduce_count</span><span class="p">)</span> \
+            <span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+</pre></div>
+
+  </div>
+</div>
+
+  </div>
+  
+            
+  <div class="item">
     <div class="name def" id="dampr.PMap.map">
     <p>def <span class="ident">map</span>(</p><p>self, f)</p>
     </div>
@@ -3508,7 +3596,7 @@ collections together.</p></div>
             
   <div class="item">
     <div class="name def" id="dampr.PMap.mean">
-    <p>def <span class="ident">mean</span>(</p><p>self, key=&lt;function &lt;lambda&gt; at 0x7f6ae0381cf8&gt;, value=&lt;function &lt;lambda&gt; at 0x7f6ae0381d70&gt;, **options)</p>
+    <p>def <span class="ident">mean</span>(</p><p>self, key=&lt;function &lt;lambda&gt; at 0x7f368f19ded8&gt;, value=&lt;function &lt;lambda&gt; at 0x7f368f19df50&gt;, **options)</p>
     </div>
     
 
@@ -3557,6 +3645,8 @@ mapped by a value function:</p>
     <div class="desc"><p>Provides a medium-level interface for writing custom functionality for mapping 
 a partition.  This can be used for creating custom logic in mappers for the sake
 of performance or additional functionality.</p>
+<p>Note: partition_map will still execute even if the partition is empty!  Make sure
+the logic handles empty sets!</p>
 <p><code>f</code> is a function that takes in an iterator of items in the partition and yields 
 out group keys and new values.</p>
 <div class="codehilite"><pre><span></span>&gt;&gt;&gt; def plus_one(items):
@@ -3574,6 +3664,8 @@ out group keys and new values.</p>
 <span class="sd">    Provides a medium-level interface for writing custom functionality for mapping </span>
 <span class="sd">    a partition.  This can be used for creating custom logic in mappers for the sake</span>
 <span class="sd">    of performance or additional functionality.</span>
+<span class="sd">    Note: partition_map will still execute even if the partition is empty!  Make sure</span>
+<span class="sd">    the logic handles empty sets!</span>
 <span class="sd">    `f` is a function that takes in an iterator of items in the partition and yields </span>
 <span class="sd">    out group keys and new values.</span>
 <span class="sd">        &gt;&gt;&gt; def plus_one(items):</span>
@@ -3603,6 +3695,8 @@ out group keys and new values.</p>
     <div class="desc"><p><code>partition_reduce</code> is a medium-level function that allows for more complex logic
 during reductions.  It can be useful in certain cases where reductions over sets
 of reduced values is convenient, such as returning only the top K items in a dataset</p>
+<p>Note: <code>partition_reduce</code> will still execute on empty partitions!  Make sure the
+logic handles cases where a partition is empty!</p>
 <div class="codehilite"><pre><span></span>&gt;&gt;&gt; def largest_number(it):
 ...   largest = float(&#39;-inf&#39;)
 ...   for group_key, its in it:
@@ -3621,6 +3715,8 @@ of reduced values is convenient, such as returning only the top K items in a dat
 <span class="sd">    `partition_reduce` is a medium-level function that allows for more complex logic</span>
 <span class="sd">    during reductions.  It can be useful in certain cases where reductions over sets</span>
 <span class="sd">    of reduced values is convenient, such as returning only the top K items in a dataset</span>
+<span class="sd">    Note: `partition_reduce` will still execute on empty partitions!  Make sure the</span>
+<span class="sd">    logic handles cases where a partition is empty!</span>
 <span class="sd">        &gt;&gt;&gt; def largest_number(it):</span>
 <span class="sd">        ...   largest = float(&#39;-inf&#39;)</span>
 <span class="sd">        ...   for group_key, its in it:</span>
@@ -3758,7 +3854,7 @@ already a unicode string.</p>
 <span class="sd">&quot;&quot;&quot;</span>
     <span class="n">aggs</span> <span class="o">=</span> <span class="p">[</span><span class="n">Map</span><span class="p">(</span><span class="n">_identity</span><span class="p">)]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">agg</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">agg</span><span class="p">[:]</span>
     <span class="n">name</span> <span class="o">=</span> <span class="s1">&#39; -&gt; &#39;</span> <span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s1">&#39;{}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">mapper</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">aggs</span><span class="p">)</span>
-    <span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;Stage {}: </span><span class="si">%s</span><span class="s1"> =&gt; </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;Stage {}: </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">name</span><span class="p">)</span>
     <span class="n">source</span><span class="p">,</span> <span class="n">pmer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pmer</span><span class="o">.</span><span class="n">_add_sink</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">],</span> 
             <span class="n">Map</span><span class="p">(</span><span class="n">fuse</span><span class="p">(</span><span class="n">aggs</span><span class="p">)),</span> 
             <span class="n">path</span><span class="o">=</span><span class="n">path</span><span class="p">,</span>
@@ -4137,7 +4233,7 @@ By default, uses /tmp as temporary storage.</p>
             
   <div class="item">
     <div class="name def" id="dampr.PReduce.unique">
-    <p>def <span class="ident">unique</span>(</p><p>self, key=&lt;function &lt;lambda&gt; at 0x7f6ae0384488&gt;)</p>
+    <p>def <span class="ident">unique</span>(</p><p>self, key=&lt;function &lt;lambda&gt; at 0x7f368f19f668&gt;)</p>
     </div>
     
 
