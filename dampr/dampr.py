@@ -158,7 +158,7 @@ class PMap(PBase):
         assert isinstance(mapper, Mapper)
         name = name if name is not None else str(mapper)
         me = self.checkpoint()
-        source, pmer = self.pmer._add_mapper([me.source], 
+        source, pmer = me.pmer._add_mapper([me.source], 
                 mapper,
                 name=name,
                 options=options)

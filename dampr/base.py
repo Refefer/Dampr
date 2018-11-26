@@ -75,6 +75,13 @@ class StreamMapper(Mapper):
         it = (v for _k, v in datasets[0].read())
         return self.streamer_f(it)
 
+    def __unicode__(self):
+        name = getattr(self.streamer_f, '__name__', str(type(self.streamer_f)))
+        return u'StreamMapper[{}]'.format(self.streamer_f.__name__)
+
+    __str__ = __unicode__
+    __repr__ = __unicode__
+
 class MapCrossJoin(Mapper):
     """
     Cross products two datasets.  If `cache` is True, will load up the
@@ -180,6 +187,14 @@ class StreamReducer(Reducer):
         assert len(datasets) == 1
         for nk, nv in self.stream_f(self.yield_groups(datasets[0])):
             yield nk, (nk, nv)
+
+    def __unicode__(self):
+        name = getattr(self.stream_f, '__name__', str(type(self.stream_f)))
+        return u'StreamReducer[{}]'.format(self.stream_f.__name__)
+
+    __str__ = __unicode__
+    __repr__ = __unicode__
+
 
 class KeyedReduce(Reduce):
     def reduce(self, *datasets):
