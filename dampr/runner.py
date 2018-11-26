@@ -39,12 +39,22 @@ class GMap(object):
         self.shuffler = shuffler
         self.options = options if options is not None else  {}
 
+    def __unicode__(self):
+        return u"Map".format()
+
+    __repr__ = __unicode__
+
 class GReduce(object):
     def __init__(self, output, inputs, reducer, options):
         self.output = output
         self.inputs = inputs
         self.reducer = reducer
         self.options = options if options is not None else  {}
+
+    def __unicode__(self):
+        return u"Reducer".format()
+
+    __repr__ = __unicode__
 
 class GSink(object):
     def __init__(self, output, inputs, mapper, path, options=None):
@@ -53,6 +63,11 @@ class GSink(object):
         self.mapper = mapper
         self.path = path
         self.options = options if options is not None else  {}
+
+    def __unicode__(self):
+        return u"Sink[path={}]".format(self.path)
+
+    __repr__ = __unicode__
 
 class Graph(object):
     def __init__(self):
@@ -159,13 +174,13 @@ class RunnerBase(object):
         to_delete = set()
         splitter = Splitter()
         for stage_id, stage in enumerate(self.graph.stages):
-            logging.info("Starting stage %s/%s", stage_id + 1, len(self.graph.stages))
-            logging.debug("Function - %s", type(stage))
+            logging.info("Stage %s/%s", stage_id + 1, len(self.graph.stages))
+            logging.info("Function - %s", stage)
             input_data = [data[i] for i in stage.inputs]
             for i, id in enumerate(input_data):
-                logging.debug("Input: %s", stage.inputs[i])
+                logging.info("Input: %s", stage.inputs[i])
 
-            logging.debug("Output: %s", stage.output)
+            logging.info("Output: %s", stage.output)
 
             cleanup_stage = True
             if isinstance(stage, GMap):

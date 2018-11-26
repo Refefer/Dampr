@@ -557,9 +557,13 @@ class MemoryInput(Chunker):
         self.partitions = min(len(items), partitions)
 
     def chunks(self):
-        chunk_size = int(len(self.items) // float(self.partitions))
-        for start in range(0, len(self.items), chunk_size):
-            yield MemoryDataset(self.items[start:start+chunk_size])
+        # Memory Dataset could be zero
+        if self.partitions == 0:
+            yield MemoryDataset(self.items)
+        else:
+            chunk_size = int(len(self.items) // float(self.partitions))
+            for start in range(0, len(self.items), chunk_size):
+                yield MemoryDataset(self.items[start:start+chunk_size])
 
 class DMChunker(Chunker):
     def __init__(self, data_mapping):

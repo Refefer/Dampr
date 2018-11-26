@@ -131,7 +131,7 @@ class PMap(PBase):
         if len(self.agg) > 0 or force:
             aggs = [Map(_identity)] if len(self.agg) == 0 else self.agg[:]
             name = ' -> ' .join('{}'.format(a.mapper.__name__) for a in aggs)
-            name = 'Stage {}: %s => %s' % (self.source, name)
+            name = 'Stage {}: %s' % (name)
             source, pmer = self.pmer._add_mapper([self.source], 
                     Map(fuse(aggs)), 
                     combiner=combiner,
@@ -190,6 +190,9 @@ class PMap(PBase):
         a partition.  This can be used for creating custom logic in mappers for the sake
         of performance or additional functionality.
 
+        Note: partition_map will still execute even if the partition is empty!  Make sure
+        the logic handles empty sets!
+
         `f` is a function that takes in an iterator of items in the partition and yields 
         out group keys and new values.
 
@@ -210,6 +213,9 @@ class PMap(PBase):
         during reductions.  It can be useful in certain cases where reductions over sets
         of reduced values is convenient, such as returning only the top K items in a dataset
 
+        Note: `partition_reduce` will still execute on empty partitions!  Make sure the
+        logic handles cases where a partition is empty!
+
             >>> def largest_number(it):
             ...   largest = float('-inf')
             ...   for group_key, its in it:
@@ -221,6 +227,38 @@ class PMap(PBase):
             [('Largest', 5)]
         """
         return self.custom_reducer(StreamReducer(f))
+
+    def len(self):
+        """
+        Counts the number of items in the 
+	collection.
+
+	    >>> Dampr.memory([1,2,3,4,5]).len().read()
+	    [5]
+        """
+
+        def _map_count(items):
+            count = 0
+            for _ in items:
+                count += 1
+
+            yield 1, count
+
+        def _reduce_count(groups):
+            count = 0
+            not_empty = False
+            for _, counts in groups:
+                not_empty = True
+                for c in counts:
+                    count += c
+
+            if not_empty:
+                yield 1, count
+
+        return self \
+                .partition_map(_map_count) \
+                .partition_reduce(_reduce_count) \
+                .map(lambda x: x[1])
 
     def map(self, f):
         """
@@ -405,7 +443,7 @@ class PMap(PBase):
     """
         aggs = [Map(_identity)] if len(self.agg) == 0 else self.agg[:]
         name = ' -> ' .join('{}'.format(a.mapper.__name__) for a in aggs)
-        name = 'Stage {}: %s => %s' % (self.source, name)
+        name = 'Stage {}: %s' % (name)
         source, pmer = self.pmer._add_sink([self.source], 
                 Map(fuse(aggs)), 
                 path=path,
@@ -474,7 +512,7 @@ class PMap(PBase):
         me = self.checkpoint()
         other = other.checkpoint()
         pmer = Dampr(me.pmer.graph.union(other.pmer.graph))
-        name = 'Stage {}: (%s X %s)' % (me.source, other.source)
+        name = 'Stage {}: Cross'
         source, pmer = pmer._add_mapper([other.source, me.source], 
                 MapCrossJoin(_cross, cache=memory), 
                 combiner=None,
