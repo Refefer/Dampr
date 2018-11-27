@@ -32,6 +32,13 @@ class Map(Mapper, Streamable):
             for k2, v2 in self.mapper(key, value):
                 yield k2, v2
 
+    def __unicode__(self):
+        name = getattr(self.mapper, '__name__', str(type(self.mapper)))
+        return u'Map[{}]'.format(name)
+
+    __str__ = __unicode__
+    __repr__ = __unicode__
+
 class ComposedStreamable(Streamable):
     def __init__(self, left, right):
         assert isinstance(left, Streamable)
