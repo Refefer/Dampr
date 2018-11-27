@@ -11,20 +11,36 @@ class Mapper(object):
     def map(self, *datasets):
         raise NotImplementedError()
 
-class Map(Mapper):
+class Streamable(object):
+    def stream(self, kvs):
+        raise NotImplementedError()
+
+class Map(Mapper, Streamable):
     """
     Standard Mapper
     """
     def __init__(self, mapper):
+        assert not isinstance(mapper, Mapper)
         self.mapper = mapper
 
     def map(self, *datasets):
         assert len(datasets) == 1
-        for key, value in datasets[0].read():
+        return self.stream(datasets[0].read())
+
+    def stream(self, kvs):
+        for key, value in kvs:
             for k2, v2 in self.mapper(key, value):
                 yield k2, v2
 
-class BlockMapper(Mapper):
+class ComposedMapper(Map):
+    def __init__(self, left, right):
+        self.left = left
+        self.right = right
+
+    def stream(self, kvs):
+        return self.right.stream(self.left.stream(kvs))
+
+class BlockMapper(Mapper, Streamable):
     """
     Custom BlockMapper.  User's can specify how a Mapper instance can
     consume a stream of key-values, allowing for custom logic.
@@ -54,15 +70,18 @@ class BlockMapper(Mapper):
 
     def map(self, *datasets):
         assert len(datasets) == 1
+        return self.stream(datasets[0].read())
+
+    def stream(self, kvs):
         self.start()
-        for key, value in datasets[0].read():
+        for key, value in kvs:
             for out in self.add(key, value):
                 yield out
 
         for out in self.finish():
             yield out
 
-class StreamMapper(Mapper):
+class StreamMapper(Mapper, Streamable):
     """
     Simple generator based block mapper.
     """
@@ -72,7 +91,10 @@ class StreamMapper(Mapper):
     
     def map(self, *datasets):
         assert len(datasets) == 1
-        it = (v for _k, v in datasets[0].read())
+        return self.stream(datasets[0].read())
+
+    def stream(self, kvs):
+        it = (v for _k, v in kvs)
         return self.streamer_f(it)
 
     def __unicode__(self):
@@ -120,7 +142,6 @@ class MapCrossJoin(Mapper):
             dataset = EmptyDataset()
         
         return dataset
-
 
 class Reducer(object):
     def reduce(self, *datasets):

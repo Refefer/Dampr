@@ -97,8 +97,13 @@ class PMap(PBase):
         else:
             return super(PMap, self).run(name, **kwargs)
 
+    def _add_mapper(self, mapper):
+        assert isinstance(mapper, Streamable)
+        # If we have a fusable mapper, just add it to the set.
+        return PMap(self.source, self.pmer, self.agg + [mapper])
+
     def _add_map(self, f):
-        return PMap(self.source, self.pmer, self.agg + [Map(f)])
+        return self._add_mapper(Map(f))
 
     def sample(self, prob):
         """
@@ -130,10 +135,10 @@ class PMap(PBase):
         """
         if len(self.agg) > 0 or force:
             aggs = [Map(_identity)] if len(self.agg) == 0 else self.agg[:]
-            name = ' -> ' .join('{}'.format(a.mapper.__name__) for a in aggs)
+            name = ' -> ' .join('{}'.format(str(a)) for a in aggs)
             name = 'Stage {}: %s' % (name)
             source, pmer = self.pmer._add_mapper([self.source], 
-                    Map(fuse(aggs)), 
+                    fuse(aggs), 
                     combiner=combiner,
                     name=name,
                     options=options)
@@ -155,6 +160,9 @@ class PMap(PBase):
             >>> Dampr.memory([1,2,3,4,5]).custom_mapper(Map(lambda k, x: [(k, x+1)])).read()
             [2, 3, 4, 5, 6]
         """
+        if isinstance(mapper, Streamable):
+            return self._add_mapper(mapper)
+
         assert isinstance(mapper, Mapper)
         name = name if name is not None else str(mapper)
         me = self.checkpoint()
@@ -445,7 +453,7 @@ class PMap(PBase):
         name = ' -> ' .join('{}'.format(a.mapper.__name__) for a in aggs)
         name = 'Stage {}: %s' % (name)
         source, pmer = self.pmer._add_sink([self.source], 
-                Map(fuse(aggs)), 
+                fuse(aggs), 
                 path=path,
                 name=name,
                 options=None)
@@ -812,29 +820,11 @@ class Dampr(object):
         return output, Dampr(ng)
 
 def fuse(aggs):
-    if len(aggs) == 1:
-        return aggs[0].mapper
+    left = aggs[0]
+    for i in range(1, len(aggs)):
+        left = ComposedMapper(left, aggs[i])
 
-    elif len(aggs) == 2:
-        first, second = aggs
-        def _fuse(k, v):
-            for k2, v2 in first.mapper(k, v):
-                for k3, v3 in second.mapper(k2, v2):
-                    yield k3, v3
-
-    elif len(aggs) == 3:
-        first, second, third = aggs
-        def _fuse(k, v):
-            for k2, v2 in first.mapper(k, v):
-                for k3, v3 in second.mapper(k2, v2):
-                    for k4, v4 in third.mapper(k3, v3):
-                        yield k4, v4
-
-    else: 
-        aggs = [Map(fuse(aggs[:3]))] + aggs[3:]
-        _fuse = fuse(aggs)
-
-    return _fuse
+    return left
 
 # This reinitializaes everytime
 RANDOM = None
