@@ -820,11 +820,14 @@ class Dampr(object):
         return output, Dampr(ng)
 
 def fuse(aggs):
-    left = aggs[0]
-    for i in range(1, len(aggs)):
-        left = ComposedMapper(left, aggs[i])
+    if len(aggs) == 1:
+        return aggs[0]
 
-    return left
+    s = aggs[1]
+    for i in range(2, len(aggs)):
+        s = ComposedStreamable(s, aggs[i])
+
+    return ComposedMapper(aggs[0], s)
 
 # This reinitializaes everytime
 RANDOM = None

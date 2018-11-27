@@ -32,13 +32,25 @@ class Map(Mapper, Streamable):
             for k2, v2 in self.mapper(key, value):
                 yield k2, v2
 
-class ComposedMapper(Map):
+class ComposedStreamable(Streamable):
     def __init__(self, left, right):
+        assert isinstance(left, Streamable)
+        assert isinstance(right, Streamable)
         self.left = left
         self.right = right
 
     def stream(self, kvs):
         return self.right.stream(self.left.stream(kvs))
+
+class ComposedMapper(Mapper):
+    def __init__(self, left, right):
+        assert isinstance(left, Mapper)
+        assert isinstance(right, Streamable)
+        self.left = left
+        self.right = right
+
+    def map(self, *datasets):
+        return self.right.stream(self.left.map(*datasets))
 
 class BlockMapper(Mapper, Streamable):
     """
