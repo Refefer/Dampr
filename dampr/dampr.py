@@ -8,7 +8,7 @@ import random
 
 from .base import *
 from .runner import MTRunner, Graph, Source
-from .dataset import MemoryInput, DirectoryInput, TextInput, Chunker
+from .dataset import MemoryInput, DirectoryInput, TextInput, Chunker, CatDataset
 
 class ValueEmitter(object):
     """
@@ -733,6 +733,28 @@ class Dampr(object):
         """
         mi = MemoryInput(list(enumerate(items)), partitions)
         source, ng = Graph().add_input(mi)
+        return PMap(source, Dampr(ng))
+
+    @classmethod
+    def read_input(self, *datasets):
+        """
+        Reads from the provided datasets.  When provided multiple datasets, it treats
+        each as a separate partition.
+
+        `read_input` can also take Chunker, which lazily returns a set of Datasets to
+        operate over.
+
+            >>> from dampr.dataset import MemoryInput
+            >>> Dampr.read_input(MemoryInput(enumerate(range(5,10)), 2))
+        """
+        if len(datasets) == 1 and isinstance(datasets, Chunker):
+            datasets = datasets[0]
+        elif len(datasets) > 1:
+            datasets = CatDataset(datasets)
+        else:
+            datasets = datasets[0]
+
+        source, ng = Graph().add_input(datasets)
         return PMap(source, Dampr(ng))
 
     @classmethod

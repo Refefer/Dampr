@@ -12,7 +12,7 @@ It loosely attempts to replicate interfaces such as Spark or Scalding for ease o
 import logging
 from .dampr import Dampr, PMap, PReduce, PJoin, ARReduce
 from .base import BlockMapper, BlockReducer
-
+from .dataset import Dataset
 
 __all__ = ["Dampr", "PMap", "PReduce", "PJoin", "ARReduce", 
         "BlockMapper", "BlockReducer"]
