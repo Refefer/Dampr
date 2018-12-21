@@ -745,7 +745,7 @@ class Dampr(object):
         `read_input` can also take Chunker, which lazily returns a set of Datasets to
         operate over.
 
-            >>> from dampr.dataset import MemoryInput
+            >>> from dampr.inputs import MemoryInput
             >>> Dampr.read_input(MemoryInput(enumerate(range(5,10)), 2))
         """
         if len(datasets) == 1 and isinstance(datasets, Chunker):
