@@ -4,20 +4,28 @@ try:
 except ImportError:
     from urllib2 import urlopen, HTTPError
 
+import glob
 from contextlib import closing
+import os
+
 from .dataset import Chunker, TextLineDataset, MemoryDataset, Dataset
 
-class DirectoryInput(Chunker):
-    def __init__(self, directory, chunk_size=64*1024**2):
-        self.directory = directory
+class PathInput(Chunker):
+    def __init__(self, path, chunk_size=64*1024**2):
+        self.path = path
         self.chunk_size = chunk_size
 
     def chunks(self):
-        for root, dirs, files in os.walk(self.directory):
-            for fname in files:
-                path = os.path.join(root, fname)
-                for chunk in TextInput(path, self.chunk_size).chunks():
-                    yield chunk
+        for path in glob.glob(self.path):
+            if os.path.isfile(path):
+                for c in TextInput(path, self.chunk_size).chunks():
+                    yield c
+            else:
+                for root, dirs, files in os.walk(self.directory):
+                    for fname in files:
+                        path = os.path.join(root, fname)
+                        for chunk in TextInput(path, self.chunk_size).chunks():
+                            yield chunk
 
 class TextInput(Chunker):
     def __init__(self, path, chunk_size=64*1024**2):

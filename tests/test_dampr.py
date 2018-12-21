@@ -371,5 +371,30 @@ class DamprTest(unittest.TestCase):
 
         self.assertEqual(results, ['<h1>Example Domain</h1>'])
 
+    def test_file_glob(self):
+        """
+        Tests that we can read file globs
+        """
+        import os
+        files = []
+        for i in range(10):
+            path = os.path.join('/tmp', '_test_dampr_{}'.format(i))
+            with open(path, 'w') as out:
+                out.write(str(i))
+
+            files.append(path)
+
+        results = Dampr.text("/tmp/_test_dampr_[135]") \
+                .map(int) \
+                .fold_by(lambda x: 1, lambda x,y: x + y) \
+                .read()
+
+        self.assertEqual(results, [(1, 1 + 3 + 5)])
+
+        for fname in files:
+            os.unlink(fname)
+
+
+
 if __name__ == '__main__':
     unittest.main()

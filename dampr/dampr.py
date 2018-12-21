@@ -9,7 +9,7 @@ import random
 from .base import *
 from .runner import MTRunner, Graph, Source
 from .dataset import Chunker, CatDataset
-from .inputs import MemoryInput, DirectoryInput, TextInput
+from .inputs import MemoryInput, PathInput
 
 class ValueEmitter(object):
     """
@@ -737,7 +737,7 @@ class Dampr(object):
         return PMap(source, Dampr(ng))
 
     @classmethod
-    def read_input(self, *datasets):
+    def read_input(cls, *datasets):
         """
         Reads from the provided datasets.  When provided multiple datasets, it treats
         each as a separate partition.
@@ -762,10 +762,10 @@ class Dampr(object):
     def text(cls, fname, chunk_size=16*1024**2):
         """
         Reads a file or directory of files into Dampr.  Each record is assumed to 
-        be newline delimited.  
+        be newline delimited.
 
         When fname is a directory, it will walk the directory, collecting all
-        files within it as part of the collection.
+        files within it as part of the collection.  `text` accepts globs.
         
         `chunk_size` describes how big each map portion will be.
 
@@ -773,13 +773,7 @@ class Dampr(object):
 
             >>> Dampr.text('/tmp', chunk_size=64*1024**2)
         """
-        if os.path.isdir(fname):
-            inp = DirectoryInput(fname, chunk_size)
-        else:
-            inp = TextInput(fname, chunk_size)
-
-        source, ng = Graph().add_input(inp)
-        return PMap(source, Dampr(ng))
+        return cls.read_input(PathInput(fname, chunk_size))
 
     @classmethod
     def json(cls, *args, **kwargs):
