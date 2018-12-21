@@ -3,6 +3,7 @@ import itertools
 import unittest
 
 from dampr import Dampr, BlockMapper, BlockReducer, Dataset
+from dampr.inputs import UrlsInput
 
 class DamprTest(unittest.TestCase):
 
@@ -359,6 +360,16 @@ class DamprTest(unittest.TestCase):
 
         self.assertEqual(results[0][1], sum(range(5)) + sum(range(10)))
 
+    def test_read_url(self):
+        """
+        Tests that we can read urls.
+        """
+        results = Dampr.read_input(UrlsInput(["http://www.example.com"])) \
+                .filter(lambda line: 'h1' in line) \
+                .map(lambda line: line.strip()) \
+                .read()
+
+        self.assertEqual(results, ['<h1>Example Domain</h1>'])
 
 if __name__ == '__main__':
     unittest.main()

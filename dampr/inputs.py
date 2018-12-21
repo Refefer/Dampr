@@ -1,0 +1,71 @@
+try:
+    from urllib.request import urlopen
+    from urllib.error import HTTPError
+except ImportError:
+    from urllib2 import urlopen, HTTPError
+
+from contextlib import closing
+from .dataset import Chunker, TextLineDataset, MemoryDataset, Dataset
+
+class DirectoryInput(Chunker):
+    def __init__(self, directory, chunk_size=64*1024**2):
+        self.directory = directory
+        self.chunk_size = chunk_size
+
+    def chunks(self):
+        for root, dirs, files in os.walk(self.directory):
+            for fname in files:
+                path = os.path.join(root, fname)
+                for chunk in TextInput(path, self.chunk_size).chunks():
+                    yield chunk
+
+class TextInput(Chunker):
+    def __init__(self, path, chunk_size=64*1024**2):
+        self.path = path
+        self.chunk_size = chunk_size
+
+    def chunks(self):
+        file_size = os.stat(self.path).st_size
+        offset = 0
+        while offset < file_size:
+            yield TextLineDataset(self.path, offset, offset + self.chunk_size)
+            offset += self.chunk_size
+
+class MemoryInput(Chunker):
+    def __init__(self, items, partitions=50):
+        self.items = items
+        self.partitions = min(len(items), partitions)
+
+    def chunks(self):
+        # Memory Dataset could be zero
+        if self.partitions == 0:
+            yield MemoryDataset(self.items)
+        else:
+            chunk_size = int(len(self.items) // float(self.partitions))
+            for start in range(0, len(self.items), chunk_size):
+                yield MemoryDataset(self.items[start:start+chunk_size])
+
+class UrlsInput(Chunker):
+    def __init__(self, urls, skip_on_error=True):
+        self.urls = urls
+        self.soe = skip_on_error
+
+    def chunks(self):
+        for url in self.urls:
+            yield UrlDataset(url, self.soe)
+
+class UrlDataset(Dataset):
+    def __init__(self, path, skip_on_error=True):
+        self.path = path
+        self.soe = skip_on_error
+
+    def read(self):
+        try:
+            with closing(urlopen(self.path)) as h:
+                for i, line in enumerate(h):
+                    yield i, line.decode('utf-8')
+
+        except HTTPError:
+            if not self.soe:
+                raise
+
