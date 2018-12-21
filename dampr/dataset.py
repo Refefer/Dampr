@@ -527,44 +527,6 @@ class StreamDataset(Dataset):
     def delete(self):
         pass
 
-class DirectoryInput(Chunker):
-    def __init__(self, directory, chunk_size=64*1024**2):
-        self.directory = directory
-        self.chunk_size = chunk_size
-
-    def chunks(self):
-        for root, dirs, files in os.walk(self.directory):
-            for fname in files:
-                path = os.path.join(root, fname)
-                for chunk in TextInput(path, self.chunk_size).chunks():
-                    yield chunk
-
-class TextInput(Chunker):
-    def __init__(self, path, chunk_size=64*1024**2):
-        self.path = path
-        self.chunk_size = chunk_size
-
-    def chunks(self):
-        file_size = os.stat(self.path).st_size
-        offset = 0
-        while offset < file_size:
-            yield TextLineDataset(self.path, offset, offset + self.chunk_size)
-            offset += self.chunk_size
-
-class MemoryInput(Chunker):
-    def __init__(self, items, partitions=50):
-        self.items = items
-        self.partitions = min(len(items), partitions)
-
-    def chunks(self):
-        # Memory Dataset could be zero
-        if self.partitions == 0:
-            yield MemoryDataset(self.items)
-        else:
-            chunk_size = int(len(self.items) // float(self.partitions))
-            for start in range(0, len(self.items), chunk_size):
-                yield MemoryDataset(self.items[start:start+chunk_size])
-
 class DMChunker(Chunker):
     def __init__(self, data_mapping):
         self.dm = data_mapping

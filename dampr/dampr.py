@@ -8,7 +8,8 @@ import random
 
 from .base import *
 from .runner import MTRunner, Graph, Source
-from .dataset import MemoryInput, DirectoryInput, TextInput, Chunker, CatDataset
+from .dataset import Chunker, CatDataset
+from .inputs import MemoryInput, DirectoryInput, TextInput
 
 class ValueEmitter(object):
     """
