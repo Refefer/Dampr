@@ -241,9 +241,10 @@ class ContiguousWriter(DatasetWriter):
     """
     Writes out data unordered into a Gzipped file
     """
-    def __init__(self, worker_fs):
+    def __init__(self, worker_fs, batch_size=10):
         super(ContiguousWriter, self).__init__(worker_fs)
         self.worker_fs = worker_fs
+        self.batch_size = batch_size
     
     def get_fileobj(self):
         raise NotImplementedError()
@@ -252,12 +253,20 @@ class ContiguousWriter(DatasetWriter):
         raise NotImplementedError()
     
     def start(self):
+        self.buffer = []
         self.f = BufferedWriter(self.get_fileobj())
     
     def add_record(self, key, value):
-        dump_pickle((key, value), self.f)
+        self.buffer.append((key, value))
+        if len(self.buffer) == self.batch_size:
+            self.flush()
+
+    def flush(self):
+        dump_pickle(self.buffer, self.f)
+        self.buffer = []
 
     def finished(self):
+        self.flush()
         if self.f.empty:
             self.f.close()
             return {0: []}
@@ -274,7 +283,7 @@ class ContiguousDiskWriter(ContiguousWriter):
         return gzip.GzipFile(self.fname, 'wb', 1)
 
     def get_dataset(self):
-        return PickledDataset(self.fname)
+        return PickledDataset(self.fname, True)
     
 class ContiguousMemoryWriter(ContiguousWriter):
     """
@@ -420,14 +429,21 @@ class TextLineDataset(Dataset):
         pass
 
 class PickledDataset(Dataset):
-    def __init__(self, path):
+    def __init__(self, path, batched=False):
         self.path = path
+        self.batched = batched
 
     def read(self):
         with gzip.GzipFile(self.path, 'rb', 1) as f:
             try:
-                while True:
-                    yield pickle.load(f)
+                if self.batched:
+                    while True:
+                        for d in pickle.load(f):
+                            yield d
+                else:
+                    while True:
+                        yield pickle.load(f)
+
             except EOFError:
                 pass
 
