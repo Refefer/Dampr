@@ -294,16 +294,17 @@ class ContiguousMemoryWriter(ContiguousWriter):
         return gzip.GzipFile(fileobj=self.buffer, mode='wb', compresslevel=1)
 
     def get_dataset(self):
-        return MemGZipDataset(self.buffer.getvalue())
+        return MemGZipDataset(self.buffer.getvalue(), True)
 
 class UnorderedWriter(DatasetWriter):
     """
     Writes unordered chunks to disk
     """
-    def __init__(self, worker_fs, chunk_size=64*1024*1024, always_to_disk=False):
+    def __init__(self, worker_fs, batch_size=10, chunk_size=64*1024*1024, always_to_disk=False):
         super(UnorderedWriter, self).__init__(worker_fs)
         self.chunk_size = chunk_size
         self.chunk_id = 0
+        self.batch_size = batch_size
         self.files = []
         self.always_to_disk = always_to_disk
     
@@ -319,17 +320,24 @@ class UnorderedWriter(DatasetWriter):
     def flush(self):
         raise NotImplementedError()
 
+    def flush_batch(self):
+        if len(self.batch) > 0:
+            dump_pickle(self.batch, self.buffer)
+            self.batch = []
+
     def reset(self):
         self.buffer = StringIO()
 
     def start(self):
+        self.batch = []
         self.reset()
 
     def add_record(self, key, value):
-        dump_pickle((key, value), self.buffer)
-
-        if self.buffer.tell() > self.chunk_size:
-            self._flush_buffer()
+        self.batch.append((key, value))
+        if len(self.batch) == self.batch_size:
+            self.flush_batch()
+            if self.buffer.tell() > self.chunk_size:
+                self._flush_buffer()
 
     def _flush_buffer(self):
         dataset = self.flush()
@@ -337,6 +345,7 @@ class UnorderedWriter(DatasetWriter):
         self.reset()
 
     def finished(self):
+        self.flush_batch()
         if self.buffer.tell() > 0:
             self._flush_buffer()
 
@@ -352,25 +361,17 @@ class UnorderedDiskWriter(UnorderedWriter):
         with open(chunk_name, 'wb') as out:
             self._write_to_gzip(out)
         
-        return PickledDataset(chunk_name)
+        return PickledDataset(chunk_name, True)
 
 class UnorderedMemoryWriter(UnorderedWriter):
     """
     Writes unordered chunks to memory
     """
     def flush(self):
-        chunk_name = self.worker_fs.get_file(str(self.chunk_id))
-        self.chunk_id += 1
-        with open(chunk_name, 'wb') as out:
-            self._write_to_gzip(out)
-        
-        return PickledDataset(chunk_name)
-
-    def flush(self):
         tmp = StringIO()
         self._write_to_gzip(tmp)
         # Compress the data 
-        return MemGZipDataset(tmp.getvalue())
+        return MemGZipDataset(tmp.getvalue(), True)
 
 class Chunker(object):
     def chunks(self):
@@ -383,6 +384,7 @@ class Dataset(Chunker):
 
     def grouped_read(self):
         for key, group in itertools.groupby(self.read(), key=lambda x: x[0]):
+            group = list(group)
             it = (kv[1] for kv in group)
             yield key, it
 
@@ -456,14 +458,20 @@ class PickledDataset(Dataset):
 
 
 class MemGZipDataset(Dataset):
-    def __init__(self, sio):
+    def __init__(self, sio, batched=False):
         self.sio = sio
+        self.batched = batched
 
     def read(self):
         with gzip.GzipFile(fileobj=StringIO(self.sio)) as sio:
             try:
-                while True:
-                    yield pickle.load(sio)
+                if not self.batched:
+                    while True:
+                        yield pickle.load(sio)
+                else:
+                    while True:
+                        for d in pickle.load(sio):
+                            yield d
             except EOFError:
                 pass
 
