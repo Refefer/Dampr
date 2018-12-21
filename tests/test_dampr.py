@@ -394,7 +394,5 @@ class DamprTest(unittest.TestCase):
         for fname in files:
             os.unlink(fname)
 
-
-
 if __name__ == '__main__':
     unittest.main()
