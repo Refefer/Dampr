@@ -406,5 +406,54 @@ class DamprTest(unittest.TestCase):
         results = sorted(list(topk.run()))
         self.assertEquals(results, [('a', 4), ('c', 3), ('i', 7), ('l', 3), ('s', 3)])
 
+    def test_file_link(self):
+        """
+        Tests that we can read file globs
+        """
+        import os
+        dirnames = []
+        for i in range(10):
+            dirname = os.path.join('/tmp', '_test_dampr_dir_{}'.format(i))
+            if os.path.isdir(dirname):
+                shutil.rmtree(dirname)
+
+            os.makedirs(dirname)
+            dirnames.append(dirname)
+
+            fname = os.path.join(dirname, 'foo')
+            with open(fname, 'w') as out:
+                out.write(str(i))
+
+        # Symlink into a new directory
+        base = '/tmp/_dampr_test_link'
+        if os.path.isdir(base):
+            shutil.rmtree(base)
+
+        dirnames.append(base)
+        os.makedirs(base)
+
+        for i in (1, 3, 5):
+            os.symlink(dirnames[i], os.path.join(base, os.path.basename(dirnames[i])))
+
+        # Yields nothing!
+        results = Dampr.text(base) \
+                .map(int) \
+                .fold_by(lambda x: 1, lambda x,y: x + y) \
+                .read()
+
+        self.assertEqual(results, [])
+
+
+        # Yields something!
+        results = Dampr.text(base, followlinks=True) \
+                .map(int) \
+                .fold_by(lambda x: 1, lambda x,y: x + y) \
+                .read()
+
+        self.assertEqual(results, [(1, 1 + 3 + 5)])
+
+        for d in dirnames:
+            shutil.rmtree(d)
+
 if __name__ == '__main__':
     unittest.main()

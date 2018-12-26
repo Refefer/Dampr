@@ -11,9 +11,10 @@ import os
 from .dataset import Chunker, TextLineDataset, MemoryDataset, Dataset
 
 class PathInput(Chunker):
-    def __init__(self, path, chunk_size=64*1024**2):
+    def __init__(self, path, chunk_size=64*1024**2, follow_links=True):
         self.path = path
         self.chunk_size = chunk_size
+        self.follow_links = follow_links
 
     def chunks(self):
         for path in glob.glob(self.path):
@@ -21,7 +22,7 @@ class PathInput(Chunker):
                 for c in TextInput(path, self.chunk_size).chunks():
                     yield c
             else:
-                for root, dirs, files in os.walk(self.directory):
+                for root, dirs, files in os.walk(self.path, followlinks=self.follow_links):
                     for fname in files:
                         path = os.path.join(root, fname)
                         for chunk in TextInput(path, self.chunk_size).chunks():

@@ -792,7 +792,7 @@ class Dampr(object):
         return PMap(source, Dampr(ng))
 
     @classmethod
-    def text(cls, fname, chunk_size=16*1024**2):
+    def text(cls, fname, chunk_size=16*1024**2, followlinks=False):
         """
         Reads a file or directory of files into Dampr.  Each record is assumed to 
         be newline delimited.
@@ -801,12 +801,13 @@ class Dampr(object):
         files within it as part of the collection.  `text` accepts globs.
         
         `chunk_size` describes how big each map portion will be.
+        `followlinks` indiicates that Dampr will follow symlinked directories.
 
         Returns a PMap object.
 
             >>> Dampr.text('/tmp', chunk_size=64*1024**2)
         """
-        return cls.read_input(PathInput(fname, chunk_size))
+        return cls.read_input(PathInput(fname, chunk_size, followlinks))
 
     @classmethod
     def json(cls, *args, **kwargs):
