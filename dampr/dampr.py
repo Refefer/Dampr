@@ -529,6 +529,39 @@ class PMap(PBase):
                 options=options)
         return PMap(source, pmer) 
 
+    def topk(self, k, value=None):
+        """
+        Computes the top k elements in the set.  The 'value' function is responsible for
+        returning a comparable object.
+
+            >>> Dampr.memory([1,3,2,4,2.2]).topk(2).read()
+            [3, 4]
+            >>> Dampr.memory([1,3,2,4,2.2]).topk(2, lambda x: -x).read()
+            [1, 2]
+        """
+        if value is None:
+            value = lambda x: x
+
+        import heapq
+        def map_topk(it):
+            heap = []
+            for x in it: 
+                heapq.heappush(heap, (value(x), x))
+                if len(heap) > k:
+                    heapq.heappop(heap)
+
+            return ((1, x) for x in heap)
+
+        def reduce_topk(it):
+            counts = (v for k, vit in it for v in vit)
+            for count, x in heapq.nlargest(k, counts):
+                yield x, 1
+
+        return self \
+                .partition_map(map_topk) \
+                .partition_reduce(reduce_topk) \
+                .map(lambda x: x[0])
+
 class ARReduce(object):
     """
     Associative Reducer operators.

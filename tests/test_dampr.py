@@ -394,5 +394,17 @@ class DamprTest(unittest.TestCase):
         for fname in files:
             os.unlink(fname)
 
+    def test_top_k(self):
+        """
+        Tests getting the top k items
+        """
+
+        word = Dampr.memory(["supercalifragilisticexpialidociousa"])
+        topk = word.flat_map(lambda w: list(w)).count() \
+                .topk(5, lambda x: x[1])
+
+        results = sorted(list(topk.run()))
+        self.assertEquals(results, [('a', 4), ('c', 3), ('i', 7), ('l', 3), ('s', 3)])
+
 if __name__ == '__main__':
     unittest.main()
