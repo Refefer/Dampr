@@ -839,6 +839,7 @@ class Dampr(object):
             >>> right.read()
             [6, 7, 8, 9, 10]
         """
+        assert len(pmers) > 0, "Need at least one graph to run!"
         sources = []
         graph = None
         for i, pmer in enumerate(pmers):

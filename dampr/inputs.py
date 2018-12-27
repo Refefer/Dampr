@@ -22,7 +22,7 @@ class PathInput(Chunker):
                 for c in TextInput(path, self.chunk_size).chunks():
                     yield c
             else:
-                for root, dirs, files in os.walk(self.path, followlinks=self.follow_links):
+                for root, dirs, files in os.walk(path, followlinks=self.follow_links):
                     for fname in files:
                         path = os.path.join(root, fname)
                         for chunk in TextInput(path, self.chunk_size).chunks():
