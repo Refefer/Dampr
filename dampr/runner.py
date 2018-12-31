@@ -423,7 +423,7 @@ class CombinerStageRunner(StageRunner):
         output_q.put((w_id, t_id, dw.finished()[0]))
 
     def execute_stage(self, t_id, payload, output_q):
-        fs = self.fs.get_worker('merge/{}'.format(t_id))
+        fs = self.fs.get_worker('merge/{}_{}'.format(*t_id))
 
         p = multiprocessing.Process(target=self.combine,
             args=(payload, output_q, fs))
@@ -479,8 +479,8 @@ class MTRunner(RunnerBase):
         """
         chunks = min(self.max_files_per_stage, self.n_maps)
         num_files = min(int(math.ceil(len(v) / float(chunks))), self.max_files_per_stage)
-        return ((k, v[s:s+num_files])
-                for s in range(0, len(v), num_files))
+        return (((k, i), v[s:s+num_files])
+                for i, s in enumerate(range(0, len(v), num_files)))
 
     def run_map(self, stage_id, data_mappings, mapper):
         # if we get more than two input mappings, we only iterate over the first one
@@ -528,7 +528,7 @@ class MTRunner(RunnerBase):
             c = NoopCombiner() if mapper.combiner is None else mapper.combiner
             csr = CombinerStageRunner(n_maps, stage_fs, c, mapper.options)
             new_collapsed = {k: [] for k in collapsed}
-            for k, v in csr.run(chunks):
+            for (k, _), v in csr.run(iter(tasks)):
                 new_collapsed[k].extend(v)
 
             collapsed = new_collapsed
@@ -578,7 +578,7 @@ class MTRunner(RunnerBase):
                 c = NoopCombiner() 
                 csr = CombinerStageRunner(self.n_maps, stage_fs, c, {})
                 jobs = self.chunk_list(None, output)
-                output = [p for t, ps in csr.run(jobs) for p in ps]
+                output = [p for _t, ps in csr.run(jobs) for p in ps]
 
             if len(output) == 1:
                 output = output[0]
