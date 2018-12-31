@@ -243,7 +243,7 @@ class StageRunner(object):
         finished = []
         def get_output():
             child_pid, task_id, payload = output_q.get()
-            finished.append(payload)
+            finished.append((task_id, payload))
             
             # Cleanup pid
             jobs[child_pid].join()
@@ -473,14 +473,14 @@ class MTRunner(RunnerBase):
         self.n_partitions = n_partitions
         self.max_files_per_stage = max_files_per_stage
 
-    def chunk_list(self, v):
+    def chunk_list(self, k, v):
         """
         Given a list of files, creates subsets of those files.
         """
         chunks = min(self.max_files_per_stage, self.n_maps)
         num_files = min(int(math.ceil(len(v) / float(chunks))), self.max_files_per_stage)
-        return ((i, v[s:s+num_files])
-                for i, s in enumerate(range(0, len(v), num_files)))
+        return ((k, v[s:s+num_files])
+                for s in range(0, len(v), num_files))
 
     def run_map(self, stage_id, data_mappings, mapper):
         # if we get more than two input mappings, we only iterate over the first one
@@ -502,20 +502,39 @@ class MTRunner(RunnerBase):
         n_maps = mapper.options.get('n_maps', self.n_maps)
         msr = MapStageRunner(n_maps, stage_fs, self.n_partitions, mapper, mapper.options)
 
-        finished = msr.run(jobs_queue)
+        finished = [p for t, p in msr.run(jobs_queue)]
 
         collapsed = self.collapse_datamappings(finished)
+        return self.combine_mappings(collapsed, mapper, n_maps, stage_fs)
+
+    def combine_mappings(self, collapsed, mapper, n_maps, stage_fs):
+        """
+        Checks that each of the file sets are less than the max number allowed for
+        a stage
+        """
         # Check for number of files
-        for k, v in collapsed.items():
-            while len(v) > self.max_files_per_stage:
-                logging.debug("Partition %s needs to be merged: found %s files", k, len(v))
-                chunks = self.chunk_list(v)
-                c = NoopCombiner() if mapper.combiner is None else mapper.combiner
-                csr = CombinerStageRunner(n_maps, stage_fs, c, mapper.options)
-                v = [f for fs in csr.run(chunks) for f in fs]
-                collapsed[k] = v
+        while True:
+            tasks = []
+            for k, v in collapsed.items():
+                if len(v) > self.max_files_per_stage:
+                    logging.debug("Partition %s needs to be merged: found %s files", k, len(v))
+
+                    tasks.extend(self.chunk_list(k, v))
+
+            if not tasks:
+                # all done
+                break
+
+            c = NoopCombiner() if mapper.combiner is None else mapper.combiner
+            csr = CombinerStageRunner(n_maps, stage_fs, c, mapper.options)
+            new_collapsed = {k: [] for k in collapsed}
+            for k, v in csr.run(chunks):
+                new_collapsed[k].extend(v)
+
+            collapsed = new_collapsed
 
         return collapsed
+
 
     def run_reducer(self, stage_id, data_mappings, reducer):
         # Collect across inputs
@@ -528,7 +547,7 @@ class MTRunner(RunnerBase):
         stage_fs = self.file_system.get_stage(stage_id)
         n_reducers = reducer.options.get('n_reducers', self.n_reducers)
         rds = ReduceStageRunner(n_reducers, stage_fs, reducer, reducer.options)
-        finished = rds.run(iter(transpose.items()))
+        finished = [p for t, p in rds.run(iter(transpose.items()))]
 
         return self.collapse_datamappings(finished)
 
@@ -543,7 +562,7 @@ class MTRunner(RunnerBase):
         n_maps = sink.options.get('n_maps', self.n_maps)
         ssr = SinkStageRunner(self.n_maps, sink, sink.path)
 
-        finished = ssr.run(jobs_queue)
+        finished = [p for t, p in ssr.run(jobs_queue)]
 
         return self.collapse_datamappings(finished)
 
@@ -558,8 +577,8 @@ class MTRunner(RunnerBase):
                 logging.debug("Combining final files: found %i", len(output))
                 c = NoopCombiner() 
                 csr = CombinerStageRunner(self.n_maps, stage_fs, c, {})
-                jobs = self.chunk_list(output)
-                output = [p for ps in csr.run(jobs) for p in ps]
+                jobs = self.chunk_list(None, output)
+                output = [p for t, ps in csr.run(jobs) for p in ps]
 
             if len(output) == 1:
                 output = output[0]
