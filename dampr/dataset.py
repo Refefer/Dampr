@@ -418,8 +418,8 @@ class TextLineDataset(Dataset):
             if self.start > 0:
                 cur_pos += len(f.readline())
 
-            for i, line in enumerate(f):
-                yield self.start + i, line.rstrip(os.linesep)
+            for line in f:
+                yield cur_pos, line.rstrip(os.linesep)
                 cur_pos += len(line)
                 if self.end is not None and cur_pos > self.end:
                     break
