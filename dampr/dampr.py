@@ -11,6 +11,11 @@ from .runner import MTRunner, Graph, Source
 from .dataset import Chunker, CatDataset
 from .inputs import MemoryInput, PathInput
 
+try:
+    unicode
+except NameError:
+    unicode = str
+
 class ValueEmitter(object):
     """
     Reads values from a processed dataset.  Can be used on the shell
