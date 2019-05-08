@@ -430,6 +430,23 @@ class TextLineDataset(Dataset):
     def delete(self):
         pass
 
+class GzipLineDataset(Dataset):
+    def __init__(self, path):
+        self.path = path
+
+    def read(self):
+        with gzip.GzipFile(self.path) as f:
+            cur_pos = 0
+            for line in f:
+                yield cur_pos, line.rstrip(os.linesep)
+                cur_pos += len(line)
+
+    def __str__(self):
+        return "GzipFile[path={}]".format(self.path)
+
+    def delete(self):
+        pass
+
 class PickledDataset(Dataset):
     def __init__(self, path, batched=False):
         self.path = path

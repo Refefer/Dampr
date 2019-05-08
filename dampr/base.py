@@ -123,6 +123,19 @@ class StreamMapper(Mapper, Streamable):
     __str__ = __unicode__
     __repr__ = __unicode__
 
+def group_datasets(dataset):
+    if isinstance(dataset, Chunker):
+        dataset = list(dataset.chunks())
+    
+    if len(dataset) > 1:
+        dataset = CatDataset(dataset)
+    elif len(dataset) == 1:
+        dataset = dataset[0]
+    else:
+        dataset = EmptyDataset()
+    
+    return dataset
+
 class MapCrossJoin(Mapper):
     """
     Cross products two datasets.  If `cache` is True, will load up the
@@ -135,7 +148,7 @@ class MapCrossJoin(Mapper):
 
     def map(self, *datasets):
         assert len(datasets) == 2
-        left, right = [self.group_datasets(d) for d in datasets]
+        left, right = [group_datasets(d) for d in datasets]
 
         # Cache the results
         if self.cache:
@@ -149,18 +162,20 @@ class MapCrossJoin(Mapper):
                 for k3, v3 in self.crosser(key, value, key2, value2):
                     yield k3, v3
 
-    def group_datasets(self, dataset):
-        if isinstance(dataset, Chunker):
-            dataset = list(dataset.chunks())
-        
-        if len(dataset) > 1:
-            dataset = CatDataset(dataset)
-        elif len(dataset) == 1:
-            dataset = dataset[0]
-        else:
-            dataset = EmptyDataset()
-        
-        return dataset
+class MapAllJoin(Mapper):
+    def __init__(self, crosser, load_f=lambda d: [v for k, v in d]):
+        self.crosser = crosser 
+        self.load_f = load_f
+
+    def map(self, *datasets):
+        assert len(datasets) == 2
+        left, right = [group_datasets(d) for d in datasets]
+
+        # Cache the results
+        right = self.load_f(right.read())
+        for key, value in left.read():
+            for k, v in self.crosser(key, value, right):
+                yield k, v
 
 class Reducer(object):
     def reduce(self, *datasets):

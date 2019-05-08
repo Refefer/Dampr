@@ -456,7 +456,7 @@ class PMap(PBase):
             >>> open("/tmp/foo/2").read()
     """
         aggs = [Map(_identity)] if len(self.agg) == 0 else self.agg[:]
-        name = ' -> ' .join('{}'.format(a.mapper.__name__) for a in aggs)
+        name = ' -> ' .join('{}'.format(unicode(a)) for a in aggs)
         name = 'Stage {}: %s' % (name)
         source, pmer = self.pmer._add_sink([self.source], 
                 fuse(aggs), 
@@ -529,6 +529,37 @@ class PMap(PBase):
         name = 'Stage {}: Cross'
         source, pmer = pmer._add_mapper([other.source, me.source], 
                 MapCrossJoin(_cross, cache=memory), 
+                combiner=None,
+                name=name,
+                options=options)
+        return PMap(source, pmer) 
+
+    def cross_set(self, other, cross, agg=None, **options):
+        """
+        Joins across the entire set in other.  This will load up all the data in `other`
+        using the aggregate function and pass it whole sale into a crossing function, `cross`.
+        Note, the cross set should _not_ be modified and is assumed to be immutable.
+
+            >>> left = Dampr.memory([1,2,3,4,5])
+            >>> right = Dampr.memory([3, 5])
+            >>> left.cross_set(right, lambda x, y: x in y, agg=set).read()
+            [(1, False), (2, False), (3, True), (4, False), (5, True)]
+        """
+        def _cross(k1, v1, right):
+            yield k1, cross(v1, right)
+
+        if agg is None:
+            agg = list
+
+        def _aggregate(d):
+            return agg(v for k, v in d)
+
+        me = self.checkpoint()
+        other = other.checkpoint()
+        pmer = Dampr(me.pmer.graph.union(other.pmer.graph))
+        name = 'Stage {}: CrossAll'
+        source, pmer = pmer._add_mapper([other.source, me.source], 
+                MapAllJoin(_cross, _aggregate), 
                 combiner=None,
                 name=name,
                 options=options)
@@ -678,11 +709,7 @@ class PReduce(PBase):
         PMap.partition_reduce for more details.
         """
         reducer = StreamReducer(f)
-        name = str(reducer)
-        new_source, pmer = me.pmer._add_reducer([self.pm.source], 
-                reducer, 
-                name=name)
-
+        new_source, pmer = self.pmer._add_reducer([self.source], reducer)
         return PMap(new_source, pmer)
 
 class PJoin(PBase):

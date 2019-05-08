@@ -8,7 +8,7 @@ import glob
 from contextlib import closing
 import os
 
-from .dataset import Chunker, TextLineDataset, MemoryDataset, Dataset
+from .dataset import Chunker, TextLineDataset, GzipLineDataset, MemoryDataset, Dataset
 
 class PathInput(Chunker):
     def __init__(self, path, chunk_size=64*1024**2, follow_links=True):
@@ -17,16 +17,21 @@ class PathInput(Chunker):
         self.follow_links = follow_links
 
     def chunks(self):
-        for path in glob.glob(self.path):
-            if os.path.isfile(path):
-                for c in TextInput(path, self.chunk_size).chunks():
-                    yield c
-            else:
-                for root, dirs, files in os.walk(path, followlinks=self.follow_links):
-                    for fname in files:
-                        path = os.path.join(root, fname)
-                        for chunk in TextInput(path, self.chunk_size).chunks():
-                            yield chunk
+        if not isinstance(self.path, list):
+            paths = [self.path]
+        else:
+            paths = self.path
+        for path_glob in paths:
+            for path in glob.glob(path_glob):
+                if os.path.isfile(path):
+                    for c in TextInput(path, self.chunk_size).chunks():
+                        yield c
+                else:
+                    for root, dirs, files in os.walk(path, followlinks=self.follow_links):
+                        for fname in files:
+                            path = os.path.join(root, fname)
+                            for chunk in TextInput(path, self.chunk_size).chunks():
+                                yield chunk
 
 class TextInput(Chunker):
     def __init__(self, path, chunk_size=64*1024**2):
@@ -34,11 +39,14 @@ class TextInput(Chunker):
         self.chunk_size = chunk_size
 
     def chunks(self):
-        file_size = os.stat(self.path).st_size
-        offset = 0
-        while offset < file_size:
-            yield TextLineDataset(self.path, offset, offset + self.chunk_size)
-            offset += self.chunk_size
+        if self.path.endswith('.gz'):
+            yield GzipLineDataset(self.path)
+        else: 
+            file_size = os.stat(self.path).st_size
+            offset = 0
+            while offset < file_size:
+                yield TextLineDataset(self.path, offset, offset + self.chunk_size)
+                offset += self.chunk_size
 
 class MemoryInput(Chunker):
     def __init__(self, items, partitions=50):

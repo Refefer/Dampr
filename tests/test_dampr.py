@@ -455,5 +455,32 @@ class DamprTest(unittest.TestCase):
         for d in dirnames:
             shutil.rmtree(d)
 
+    def _test_concat(self):
+        """
+        Tests concatenating K datasets into a new Dampr
+        """
+
+        word1 = Dampr.memory("abcdefg")
+        word1.concat(Dampr.memory("hijklmn"))
+
+        results = sorted(list(word1.run()))
+        self.assertEquals(results, list('abcdefghijklmn'))
+
+    def test_cross_set(self):
+        """
+        Tests that we can join a smaller dataset on the map pass
+        """
+
+        right = Dampr.memory(range(5, 15))
+
+        results = self.items.cross_set(right, lambda x, r: (x, x in r)) \
+            .filter(lambda x: x[1]) \
+            .map(lambda x: x[0]) \
+            .read()
+
+        results.sort()
+
+        self.assertEqual(results, range(10,15))
+
 if __name__ == '__main__':
     unittest.main()
