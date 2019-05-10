@@ -100,15 +100,16 @@ class ReducedWriter(DatasetWriter):
         else:
             self.key_set[key] = value
 
-    def flush(self):
+    def flush(self, finished=False):
         for k, v in self.key_set.items():
             self.dw.add_record(k, v)
 
         self.dw.flush()
-        self.key_set.clear()
+        if not finished:
+            self.key_set.clear()
 
     def finished(self):
-        self.flush()
+        self.flush(True)
         return self.dw.finished()
 
 class SimpleWriter(DatasetWriter):
@@ -280,9 +281,12 @@ class ContiguousWriter(DatasetWriter):
     """
     Writes out data unordered into a Gzipped file
     """
-    def __init__(self, worker_fs, batch_size=settings.batch_size):
+    def __init__(self, worker_fs, batch_size=None):
         super(ContiguousWriter, self).__init__(worker_fs)
         self.worker_fs = worker_fs
+        if batch_size is None:
+            batch_size = settings.batch_size
+
         self.batch_size = batch_size
     
     def get_fileobj(self):
@@ -330,7 +334,9 @@ class ContiguousMemoryWriter(ContiguousWriter):
     """
     def get_fileobj(self):
         self.buffer = StringIO()
-        return gzip.GzipFile(fileobj=self.buffer, mode='wb', compresslevel=settings.compress_level)
+        return gzip.GzipFile(fileobj=self.buffer, 
+                mode='wb', 
+                compresslevel=settings.compress_level)
 
     def get_dataset(self):
         return MemGZipDataset(self.buffer.getvalue(), True)
@@ -341,7 +347,10 @@ class UnorderedWriter(SimpleWriter):
     """
     def _write_to_gzip(self, fobj):
         buf = self.buffer
-        with gzip.GzipFile(fileobj=fobj, mode='wb', compresslevel=settings.compress_level) as f:
+        with gzip.GzipFile(fileobj=fobj, 
+                mode='wb', 
+                compresslevel=settings.compress_level) as f:
+
             buf.seek(0)
             data = buf.read(4096 * 4)
             while data:
