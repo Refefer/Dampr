@@ -282,9 +282,9 @@ class MapStageRunner(StageRunner):
 
         # Default job, nothing special
         if self.options.get('memory', False):
-            writer_cls = BufferedSortedMemoryWriter
+            writer_cls = SortedMemoryWriter
         else:
-            writer_cls = BufferedSortedDiskWriter
+            writer_cls = SortedDiskWriter
 
         dw = CSDatasetWriter(fs, Splitter(), self.n_partitions, writer_cls=writer_cls)
 
@@ -303,17 +303,17 @@ class MapStageRunner(StageRunner):
         """
         w_id = os.getpid()
         if self.options.get('memory', False):
-            dw = BufferedSortedMemoryWriter(fs)
+            dw = SortedMemoryWriter(fs)
         else:
-            dw = BufferedSortedDiskWriter(fs)
+            dw = SortedDiskWriter(fs)
 
         # Do we have a map side partial reducer?
         binop = self.options.get('binop')
         if callable(binop):
-            reduce_buffer = self.options.get('reduce_buffer', 1000)
-            if reduce_buffer > 0:
-                # Zero buffer means all reductions will happen reduce side
-                dw = ReducedWriter(dw, binop, max_values=reduce_buffer)
+            # Zero buffer means all reductions will happen reduce side
+            dw = MaxMemoryWriter(ReducedWriter(dw, binop))
+        else:
+            dw = MaxMemoryWriter(dw)
 
         dw.start()
         m_id, main, supplemental = job
@@ -348,9 +348,9 @@ class MapStageRunner(StageRunner):
         else:
             c = NoopCombiner() if self.mapper.combiner is None else self.mapper.combiner
             if self.options.get('memory', False):
-                writer_cls = UnorderedDiskWriter
+                writer_cls = lambda fs: MaxMemoryWriter(UnorderedDiskWriter(fs))
             else:
-                writer_cls = UnorderedMemoryWriter
+                writer_cls = lambda fs: MaxMemoryWriter(UnorderedMemoryWriter(fs))
 
             s = DefaultShuffler(self.n_partitions, Splitter(), writer_cls)
             o = self.mapper.options
@@ -464,11 +464,23 @@ class ReduceStageRunner(StageRunner):
 
 class MTRunner(RunnerBase):
     def __init__(self, name, graph, 
-            n_maps=settings.max_processes, 
-            n_reducers=settings.max_processes,
-            n_partitions=settings.partitions,
-            max_files_per_stage=settings.max_files_per_stage):
+            n_maps=None, 
+            n_reducers=None,
+            n_partitions=None,
+            max_files_per_stage=None):
         super(MTRunner, self).__init__(name, graph)
+        if n_maps is None:
+            n_maps = settings.max_processes
+
+        if n_reducers is None:
+            n_reducers = settings.max_processes
+
+        if n_partitions is None:
+            n_partitions = settings.partitions
+
+        if max_files_per_stage is None:
+            max_files_per_stage = settings.max_files_per_stage
+
         self.n_maps = n_maps
         self.n_reducers = n_reducers
         self.n_partitions = n_partitions
