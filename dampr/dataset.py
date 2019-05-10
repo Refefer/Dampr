@@ -142,11 +142,12 @@ class SimpleWriter(DatasetWriter):
         self.kvs = []
 
     def flush(self, finished=False):
-        logging.debug("Flushing {} kvs".format(len(self.kvs)))
-        dataset = self.flush_buffer()
-        self.files.append(dataset)
-        if not finished:
-            self.reset()
+        if len(self.kvs) > 0:
+            logging.debug("Flushing {} kvs".format(len(self.kvs)))
+            dataset = self.flush_buffer()
+            self.files.append(dataset)
+            if not finished:
+                self.reset()
 
     def finished(self):
         if len(self.kvs) > 0:
