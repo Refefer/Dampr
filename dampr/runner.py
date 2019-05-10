@@ -301,6 +301,8 @@ class MapStageRunner(StageRunner):
         """
         Runs a more fine grained map/combine/shuffler
         """
+        m_id, main, supplemental = job
+        
         w_id = os.getpid()
         if self.options.get('memory', False):
             dw = SortedMemoryWriter(fs)
@@ -316,7 +318,6 @@ class MapStageRunner(StageRunner):
             dw = MaxMemoryWriter(dw)
 
         dw.start()
-        m_id, main, supplemental = job
         logging.debug("Mapper %i: Computing map: %i", w_id, m_id)
         for k, v in self.mapper.mapper.map(main, *supplemental):
             dw.add_record(k, v)
@@ -335,7 +336,7 @@ class MapStageRunner(StageRunner):
         results = shuffler.shuffle(fs, [combined_stream])
 
         out_q.put((w_id, m_id, results))
-        logging.debug("Mapper: %i: Finished", w_id)
+        logging.debug("Mapper: %i: Finished Mab-Combine", w_id)
 
 
     def execute_stage(self, t_id, payload, output_q):

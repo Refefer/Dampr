@@ -7,6 +7,7 @@ import os
 import sys
 import itertools
 import heapq
+import io
 from operator import itemgetter
 
 from .memory import MemoryChecker
@@ -30,6 +31,10 @@ except ImportError:
 
 def gc_collect():
     logging.debug("Collecting gc: {}".format(gc.collect()))
+
+def gzip_reader(*args, **kwargs):
+    fd = gzip.GzipFile(*args, **kwargs)
+    return io.BufferedReader(fd, 1024**2)
 
 class DatasetWriter(object):
     def __init__(self, worker_fs):
@@ -461,7 +466,7 @@ class GzipLineDataset(Dataset):
         self.path = path
 
     def read(self):
-        with gzip.GzipFile(self.path) as f:
+        with gzip_reader(self.path) as f:
             cur_pos = 0
             for line in f:
                 yield cur_pos, line.rstrip(os.linesep)
@@ -479,7 +484,7 @@ class PickledDataset(Dataset):
         self.batched = batched
 
     def read(self):
-        with gzip.GzipFile(self.path, 'rb') as f:
+        with gzip_reader(self.path, 'rb') as f:
             try:
                 if self.batched:
                     while True:
@@ -506,7 +511,7 @@ class MemGZipDataset(Dataset):
         self.batched = batched
 
     def read(self):
-        with gzip.GzipFile(fileobj=StringIO(self.sio)) as sio:
+        with gzip_reader(fileobj=StringIO(self.sio)) as sio:
             try:
                 if not self.batched:
                     while True:

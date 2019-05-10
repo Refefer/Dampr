@@ -29,8 +29,8 @@ class Map(Mapper, Streamable):
 
     def stream(self, kvs):
         for key, value in kvs:
-            for k2, v2 in self.mapper(key, value):
-                yield k2, v2
+            for nkv in self.mapper(key, value):
+                yield nkv
 
     def __unicode__(self):
         name = getattr(self.mapper, '__name__', str(type(self.mapper)))
