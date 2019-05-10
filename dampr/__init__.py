@@ -13,9 +13,10 @@ import logging
 from .dampr import Dampr, PMap, PReduce, PJoin, ARReduce
 from .base import BlockMapper, BlockReducer
 from .dataset import Dataset
+import settings
 
 __all__ = ["Dampr", "PMap", "PReduce", "PJoin", "ARReduce", 
-        "BlockMapper", "BlockReducer"]
+        "BlockMapper", "BlockReducer", "settings"]
 
 
 def setup_logging(debug=False):

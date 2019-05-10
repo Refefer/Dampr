@@ -9,6 +9,7 @@ import tempfile
 
 from .base import *
 from .dataset import *
+import settings
 
 CPUS = multiprocessing.cpu_count()
 
@@ -463,10 +464,10 @@ class ReduceStageRunner(StageRunner):
 
 class MTRunner(RunnerBase):
     def __init__(self, name, graph, 
-            n_maps=CPUS, 
-            n_reducers=CPUS,
-            n_partitions=91,
-            max_files_per_stage=50):
+            n_maps=settings.max_processes, 
+            n_reducers=settings.max_processes,
+            n_partitions=settings.partitions,
+            max_files_per_stage=settings.max_files_per_stage):
         super(MTRunner, self).__init__(name, graph)
         self.n_maps = n_maps
         self.n_reducers = n_reducers
