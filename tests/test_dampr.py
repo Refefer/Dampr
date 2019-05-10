@@ -2,8 +2,16 @@ import shutil
 import itertools
 import unittest
 
-from dampr import Dampr, BlockMapper, BlockReducer, Dataset
+from dampr import Dampr, BlockMapper, BlockReducer, Dataset, settings
 from dampr.inputs import UrlsInput
+
+class RangeDataset(Dataset):
+    def __init__(self, n):
+        self.n = n
+
+    def read(self):
+        for i in range(self.n):
+            yield i, i
 
 class DamprTest(unittest.TestCase):
 
@@ -14,6 +22,10 @@ class DamprTest(unittest.TestCase):
     def test_identity(self):
         results = self.items.run()
         self.assertEquals(list(range(10, 20)), list(results))
+
+    def test_map(self):
+        results = self.items.map(lambda x: x + 1).run()
+        self.assertEquals(list(range(11, 21)), list(results))
 
     def test_count(self):
         res = self.items \
@@ -177,7 +189,7 @@ class DamprTest(unittest.TestCase):
 
         output = sink.count()
 
-        results = list(output.run())
+        results = sorted(list(output.run()))
         self.assertEquals([('{}'.format(i), 1) for i in range(10, 20)], results)
 
         shutil.rmtree(path)
@@ -192,7 +204,7 @@ class DamprTest(unittest.TestCase):
         res = sink.run()
         output = sink.count()
 
-        results = list(output.run())
+        results = sorted(list(output.run()))
         self.assertEquals([(str(i), 1) for i in range(10, 20)], results)
 
     def test_cross_join(self):
@@ -207,7 +219,7 @@ class DamprTest(unittest.TestCase):
                 .cross_right(total, lambda v1, v2: round(v1 / float(v2[1]), 4)) \
                 .sort_by(lambda x: x)
 
-        results = list(output.run())
+        results = sorted(list(output.run()))
         count = sum(range(10, 20))
         expected = [round(i / float(count), 4) for i in range(10, 20)]
         self.assertEquals(expected, results)
@@ -346,14 +358,7 @@ class DamprTest(unittest.TestCase):
         """
         Tests that custom taps work as expected.
         """
-        class RangeDataset(Dataset):
-            def __init__(self, n):
-                self.n = n
-
-            def read(self):
-                for i in range(self.n):
-                    yield i, i
-
+        
         results = Dampr.read_input(RangeDataset(5), RangeDataset(10)) \
                 .fold_by(lambda x: 1, lambda x, y: x + y) \
                 .read()

@@ -265,7 +265,7 @@ class SinkWriter(DatasetWriter):
         super(SinkWriter, self).__init__(None)
         self.path = path
         self.idx = idx
-        self.fname = os.path.join(self.path, str(self.idx))
+        self.fname = os.path.join(self.path, 'part-{}'.format(self.idx))
 
     def start(self):
         self.f = open(self.fname, 'w')
