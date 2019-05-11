@@ -1,3 +1,4 @@
+import gc
 import multiprocessing
 from multiprocessing import Queue
 
@@ -67,8 +68,8 @@ class MapStageRunner(StageRunner):
             if job is None: 
                 break
 
-            m_id, main, supplemental = job
-            logging.debug("Mapper %i: Computing map: %i", w_id, m_id)
+            t_id, main, supplemental = job
+            logging.debug("Mapper %i: Computing map: %i", w_id, t_id)
             for k, v in self.mapper.mapper.map(main, *supplemental):
                 dw.add_record(k, v)
 
@@ -108,7 +109,12 @@ class MapStageRunner(StageRunner):
 
         sources = dw.finished()[0]
 
+
         if len(sources) > 1:
+            # gc
+            dw = None
+            gc.collect()
+
             logging.debug("Combining outputs: found %i files", len(sources))
             logging.debug("Combining: %s", sources)
             combined_stream = combiner.combine(sources)
