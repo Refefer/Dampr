@@ -77,7 +77,7 @@ class InterpolativeMemoryChecker(object):
         self.max_memory_in_mbs = max_memory_in_mbs
 
     def start(self):
-        self.mem_per_item = 0.
+        self.mem_per_item = 1e-7
         self.start_memory = get_cur_memory()
         self.count = 0.
         self.next_check = settings.memory_min_count
