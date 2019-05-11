@@ -10,10 +10,15 @@ best utilized via it's DSL which provides higher level functionality for complex
 It loosely attempts to replicate interfaces such as Spark or Scalding for ease of pickup.
 """
 import logging
+import sys
 from .dampr import Dampr, PMap, PReduce, PJoin, ARReduce
 from .base import BlockMapper, BlockReducer
 from .dataset import Dataset
-import settings
+
+if sys.version_info.major == 3:
+    import dampr.settings as settings
+else:
+    import settings
 
 __all__ = ["Dampr", "PMap", "PReduce", "PJoin", "ARReduce", 
         "BlockMapper", "BlockReducer", "settings"]

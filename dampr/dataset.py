@@ -11,7 +11,11 @@ import io
 from operator import itemgetter
 
 from .memory import MemoryChecker
-import settings
+
+if sys.version_info.major == 3:
+    import dampr.settings as settings
+else:
+    import settings
 
 PY_MAJOR = sys.version_info.major
 

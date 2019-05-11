@@ -1,3 +1,4 @@
+import sys
 import math
 import os
 import shutil
@@ -7,7 +8,11 @@ import tempfile
 from .base import *
 from .dataset import *
 from .stagerunner import *
-import settings
+
+if sys.version_info.major == 3:
+    import dampr.settings as settings
+else:
+    import settings
 
 class Source(object):
     CNT = 0

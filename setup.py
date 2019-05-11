@@ -11,7 +11,7 @@ with open(os.path.join(BASE, "README.md")) as f:
 
 setup(
     name='dampr',
-    version="0.1.7",
+    version="0.2.0",
     description="Data Processing implementation in Python",
     long_description=long_description,
     url="https://www.github.com/Refefer/Dampr",
@@ -20,7 +20,7 @@ setup(
     author='Andrew Stanton',
     author_email="refefer@gmail.com",
     classifiers=[
-       "Development Status :: 3 - Alpha",
+       "Development Status :: 4 - Beta",
        "License :: OSI Approved :: Apache Software License",
        "Programming Language :: Python :: 2",
        "Programming Language :: Python :: 3",

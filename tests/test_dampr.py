@@ -485,7 +485,7 @@ class DamprTest(unittest.TestCase):
 
         results.sort()
 
-        self.assertEqual(results, range(10,15))
+        self.assertEqual(results, list(range(10,15)))
 
 if __name__ == '__main__':
     unittest.main()
