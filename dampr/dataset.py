@@ -147,7 +147,6 @@ class SimpleWriter(DatasetWriter):
 
     def flush(self, finished=False):
         if len(self.kvs) > 0:
-            logging.debug("Flushing {} kvs".format(len(self.kvs)))
             dataset = self.flush_buffer()
             self.files.append(dataset)
             if not finished:
@@ -201,7 +200,7 @@ class MaxMemoryWriter(DatasetWriter):
         if self.mem_checker.check_over_highwatermark():
             self.writer.flush()
             gc_collect()
-            self.mem_checker.start()
+            self.mem_checker.reset()
 
         self.writer.add_record(key, value)
 
@@ -251,7 +250,7 @@ class CSDatasetWriter(DatasetWriter):
         if not finished:
             self.kvs = []
             gc_collect()
-            self.mem_checker.start()
+            self.mem_checker.reset()
 
     def add_record(self, key, value):
         self.kvs.append((key, value))

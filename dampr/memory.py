@@ -31,8 +31,11 @@ class MemoryChecker(object):
 
     def start(self):
         self.start_memory = get_cur_memory()
+        self.reset()
+
+    def reset(self):
         self.count = 0
-        self.last_check = 0 
+        self.last_check = 0
 
     def check_over_highwatermark(self):
         self.count += 1

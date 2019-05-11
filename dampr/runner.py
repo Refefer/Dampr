@@ -309,15 +309,15 @@ class MTRunner(RunnerBase):
                 break
 
             c = NoopCombiner() if mapper.combiner is None else mapper.combiner
-            csr = CombinerStageRunner(n_maps, stage_fs, c, mapper.options)
+            csr = CombinerStageRunner(n_maps, stage_fs, c, mapper.options, per_tid=True)
             new_collapsed = {k: [] for k in collapsed}
-            for (k, _), v in csr.run(iter(tasks)):
-                new_collapsed[k].extend(v)
+            for combine_set in csr.run(iter(tasks)): 
+                for (k, _), v in combine_set:
+                    new_collapsed[k].extend(v)
 
             collapsed = new_collapsed
 
         return collapsed
-
 
     def run_reducer(self, stage_id, data_mappings, reducer):
         # Collect across inputs

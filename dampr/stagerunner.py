@@ -192,11 +192,36 @@ class CombinerStageRunner(StageRunner):
     """
     Merges files together to reduce their on disk presence
     """
-    def __init__(self, max_procs, fs, combiner, options):
+    def __init__(self, max_procs, fs, combiner, options, per_tid=False):
         super(CombinerStageRunner, self).__init__(max_procs)
         self.fs = fs
         self.combiner = combiner
         self.options = options
+        self.per_tid = per_tid
+
+    def combine_per_key(self, input_q, output_q, fs):
+        w_id = os.getpid()
+        finished = []
+        while True:
+            job = input_q.get()
+            if job is None: break
+            t_id, datasets = job
+
+            if self.options.get('memory', False):
+                dw = ContiguousMemoryWriter(fs)
+            else:
+                dw = ContiguousDiskWriter(fs)
+
+            dw.start()
+            for k,v in self.combiner.combine(datasets):
+                dw.add_record(k,v)
+
+            for d in datasets:
+                d.delete()
+
+            finished.append((t_id, dw.finished()[0]))
+
+        output_q.put(finished)
 
     def combine(self, input_q, output_q, fs):
         w_id = os.getpid()
@@ -210,7 +235,7 @@ class CombinerStageRunner(StageRunner):
         while True:
             job = input_q.get()
             if job is None: break
-            t_id, datasets = job
+            _t_id, datasets = job
             for k,v in self.combiner.combine(datasets):
                 dw.add_record(k,v)
 
@@ -222,7 +247,8 @@ class CombinerStageRunner(StageRunner):
     def launch_process(self, p_id, input_q, output_q):
         fs = self.fs.get_worker('merge/{}'.format(p_id))
 
-        p = multiprocessing.Process(target=self.combine,
+        f = self.combine_per_key if self.per_tid else self.combine
+        p = multiprocessing.Process(target=f,
             args=(input_q, output_q, fs))
 
         return p
