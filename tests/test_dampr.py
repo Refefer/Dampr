@@ -471,21 +471,33 @@ class DamprTest(unittest.TestCase):
         results = sorted(list(word1.run()))
         self.assertEquals(results, list('abcdefghijklmn'))
 
-    def test_cross_set(self):
+    def test_map_values(self):
         """
-        Tests that we can join a smaller dataset on the map pass
+        Tests that we can map a value in a two tuple
         """
 
-        right = Dampr.memory(range(5, 15))
-
-        results = self.items.cross_set(right, lambda x, r: (x, x in r)) \
-            .filter(lambda x: x[1]) \
-            .map(lambda x: x[0]) \
+        results = self.items \
+            .map(lambda item: (item, item)) \
+            .mapValues(lambda v: v + 1) \
             .read()
 
         results.sort()
 
-        self.assertEqual(results, list(range(10,15)))
+        self.assertEqual(results, zip(range(10,20), range(11, 21)))
+
+    def test_map_keys(self):
+        """
+        Tests that we can map a tuple value
+        """
+
+        results = self.items \
+            .map(lambda item: (item, item)) \
+            .mapKeys(lambda v: v + 1) \
+            .read()
+
+        results.sort()
+
+        self.assertEqual(results, zip(range(11,21), range(10, 20)))
 
 if __name__ == '__main__':
     unittest.main()

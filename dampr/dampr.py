@@ -287,6 +287,33 @@ class PMap(PBase):
 
         return self._add_map(_map)
 
+    def mapValues(self, f):
+        """
+        Maps values of a two-tuple in the underlying collection using function 
+        `f`:
+
+            >>> Dampr.memory([('a',1),('b',2)]).mapValues(lambda x: x + 1).read()
+            [('a', 2), ('b', 3)]
+        """
+        def _map_values(k, v):
+            yield k, (v[0], f(v[1]))
+
+        return self._add_map(_map_values)
+
+    def mapKeys(self, f):
+        """
+        Maps keys of a two-tuple in the underlying collection using function 
+        `f`:
+
+            >>> Dampr.memory([('a',1),('bb',2)]).mapValues(len).read()
+            [(1, 1), (2, 2)]
+        """
+        def _map_keys(k, v):
+            yield k, (f(v[0]), v[1])
+
+        return self._add_map(_map_keys)
+
+
     def filter(self, f):
         """
         Filters items from a collection based on a predicate f.
