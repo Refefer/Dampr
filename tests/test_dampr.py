@@ -483,7 +483,7 @@ class DamprTest(unittest.TestCase):
 
         results.sort()
 
-        self.assertEqual(results, zip(range(10,20), range(11, 21)))
+        self.assertEqual(results, list(zip(range(10,20), range(11, 21))))
 
     def test_map_keys(self):
         """
@@ -497,7 +497,7 @@ class DamprTest(unittest.TestCase):
 
         results.sort()
 
-        self.assertEqual(results, zip(range(11,21), range(10, 20)))
+        self.assertEqual(results, list(zip(range(11,21), range(10, 20))))
 
     def test_prefix(self):
         """
@@ -510,7 +510,7 @@ class DamprTest(unittest.TestCase):
 
         results.sort()
 
-        self.assertEqual(results, zip(range(11,21), range(10, 20)))
+        self.assertEqual(results, list(zip(range(11,21), range(10, 20))))
 
     def test_suffix(self):
         """
@@ -523,7 +523,7 @@ class DamprTest(unittest.TestCase):
 
         results.sort()
 
-        self.assertEqual(results, zip(range(10,20), range(11, 21)))
+        self.assertEqual(results, list(zip(range(10,20), range(11, 21))))
 
 
 if __name__ == '__main__':
