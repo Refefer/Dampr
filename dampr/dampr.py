@@ -287,12 +287,12 @@ class PMap(PBase):
 
         return self._add_map(_map)
 
-    def mapValues(self, f):
+    def map_values(self, f):
         """
         Maps values of a two-tuple in the underlying collection using function 
         `f`:
 
-            >>> Dampr.memory([('a',1),('b',2)]).mapValues(lambda x: x + 1).read()
+            >>> Dampr.memory([('a',1),('b',2)]).map_values(lambda x: x + 1).read()
             [('a', 2), ('b', 3)]
         """
         def _map_values(k, v):
@@ -300,18 +300,44 @@ class PMap(PBase):
 
         return self._add_map(_map_values)
 
-    def mapKeys(self, f):
+    def map_keys(self, f):
         """
         Maps keys of a two-tuple in the underlying collection using function 
         `f`:
 
-            >>> Dampr.memory([('a',1),('bb',2)]).mapValues(len).read()
+            >>> Dampr.memory([('a',1),('bb',2)]).map_keys(len).read()
             [(1, 1), (2, 2)]
         """
         def _map_keys(k, v):
             yield k, (f(v[0]), v[1])
 
         return self._add_map(_map_keys)
+
+    def prefix(self, f):
+        """
+        Creates a key from an item, creating a two-tuple
+        `f`:
+
+            >>> Dampr.memory(['a','bb']).prefix(len).read()
+            [(1, 'a'), (2, 'bb')]
+        """
+        def _map_prefix(k, v):
+            yield k, (f(v), v)
+
+        return self._add_map(_map_prefix)
+
+    def suffix(self, f):
+        """
+        Creates a value from an item, create a two-tuple
+        `f`:
+
+            >>> Dampr.memory([('a', 1),('bb', b)]).suffix(len).read()
+            [1, 2]
+        """
+        def _map_suffix(k, v):
+            yield k, (v, f(v))
+
+        return self._add_map(_map_suffix)
 
 
     def filter(self, f):

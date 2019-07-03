@@ -478,7 +478,7 @@ class DamprTest(unittest.TestCase):
 
         results = self.items \
             .map(lambda item: (item, item)) \
-            .mapValues(lambda v: v + 1) \
+            .map_values(lambda v: v + 1) \
             .read()
 
         results.sort()
@@ -492,12 +492,39 @@ class DamprTest(unittest.TestCase):
 
         results = self.items \
             .map(lambda item: (item, item)) \
-            .mapKeys(lambda v: v + 1) \
+            .map_keys(lambda v: v + 1) \
             .read()
 
         results.sort()
 
         self.assertEqual(results, zip(range(11,21), range(10, 20)))
+
+    def test_prefix(self):
+        """
+        Creates a key from the item: (f(data), data)
+        """
+
+        results = self.items \
+            .prefix(lambda item: item+1) \
+            .read()
+
+        results.sort()
+
+        self.assertEqual(results, zip(range(11,21), range(10, 20)))
+
+    def test_suffix(self):
+        """
+        Creates a key from the item: (data, f(data))
+        """
+
+        results = self.items \
+            .suffix(lambda item: item+1) \
+            .read()
+
+        results.sort()
+
+        self.assertEqual(results, zip(range(10,20), range(11, 21)))
+
 
 if __name__ == '__main__':
     unittest.main()
