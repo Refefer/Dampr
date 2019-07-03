@@ -14,6 +14,7 @@ setup(
     version="0.2.2",
     description="Data Processing implementation in Python",
     long_description=long_description,
+    long_description_content_type="text/markdown",
     url="https://www.github.com/Refefer/Dampr",
     packages=find_packages(BASE),
     test_suite="tests",
