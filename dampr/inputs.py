@@ -21,17 +21,20 @@ class PathInput(Chunker):
             paths = [self.path]
         else:
             paths = self.path
+
         for path_glob in paths:
             for path in glob.glob(path_glob):
                 if os.path.isfile(path):
                     for c in TextInput(path, self.chunk_size).chunks():
                         yield c
+
                 else:
                     for root, dirs, files in os.walk(path, followlinks=self.follow_links):
                         for fname in files:
                             path = os.path.join(root, fname)
                             for chunk in TextInput(path, self.chunk_size).chunks():
                                 yield chunk
+
 
 class TextInput(Chunker):
     def __init__(self, path, chunk_size=64*1024**2):
@@ -48,6 +51,7 @@ class TextInput(Chunker):
                 yield TextLineDataset(self.path, offset, offset + self.chunk_size)
                 offset += self.chunk_size
 
+
 class MemoryInput(Chunker):
     def __init__(self, items, partitions=50):
         self.items = items
@@ -62,6 +66,7 @@ class MemoryInput(Chunker):
             for start in range(0, len(self.items), chunk_size):
                 yield MemoryDataset(self.items[start:start+chunk_size])
 
+
 class UrlsInput(Chunker):
     def __init__(self, urls, skip_on_error=True):
         self.urls = urls
@@ -70,6 +75,7 @@ class UrlsInput(Chunker):
     def chunks(self):
         for url in self.urls:
             yield UrlDataset(url, self.soe)
+
 
 class UrlDataset(Dataset):
     def __init__(self, path, skip_on_error=True):

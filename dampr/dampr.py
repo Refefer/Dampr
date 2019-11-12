@@ -504,9 +504,9 @@ class PMap(PBase):
         already a unicode string.
 
             >>> Dampr.memory(["foo", "bar", "baz"]).sink("/tmp/foo").run()
-            >>> open("/tmp/foo/0").read()
-            >>> open("/tmp/foo/1").read()
-            >>> open("/tmp/foo/2").read()
+            >>> open("/tmp/foo/part-0").read()
+            >>> open("/tmp/foo/part-1").read()
+            >>> open("/tmp/foo/part-2").read()
     """
         aggs = [Map(_identity)] if len(self.agg) == 0 else self.agg[:]
         name = ' -> ' .join('{}'.format(unicode(a)) for a in aggs)
@@ -524,7 +524,7 @@ class PMap(PBase):
         tab-delimited output, and sinks it to the provided path:
 
             >>> Dampr.memory([("Hank Aaron", 755)]).sink_tsv("/tmp/foo").run()
-            >>> open("/tmp/foo/0").read()
+            >>> open("/tmp/foo/part-0").read()
         """
         return self.map(lambda x: u'\t'.join(unicode(p) for p in x)).sink(path)
 
@@ -534,7 +534,7 @@ class PMap(PBase):
         it to a line-delimited json to the given path:
 
             >>> Dampr.memory([{"name": "Hank Aaron", "home runs": 755}]).sink_json("/tmp/foo").run()
-            >>> open("/tmp/foo/0").read()
+            >>> open("/tmp/foo/part-0").read()
         """
         return self.map(json.dumps).sink(path)
 
