@@ -272,7 +272,7 @@ class SinkWriter(DatasetWriter):
         self.fname = os.path.join(self.path, 'part-{}'.format(self.idx))
 
     def start(self):
-        self.f = open(self.fname, 'w')
+        self.f = open(self.fname, 'w', encoding='utf-8')
 
     def add_record(self, key, value):
         print(value, file=self.f)
@@ -456,7 +456,7 @@ class TextLineDataset(Dataset):
         self.end = end
 
     def read(self):
-        with open(self.path) as f:
+        with open(self.path, encoding='utf-8') as f:
             f.seek(self.start)
             cur_pos = self.start
             if self.start > 0:
@@ -482,7 +482,7 @@ class GzipLineDataset(Dataset):
         with gzip_reader(self.path) as f:
             cur_pos = 0
             for line in f:
-                yield cur_pos, line.rstrip(os.linesep)
+                yield cur_pos, line.decode('utf-8').rstrip(os.linesep)
                 cur_pos += len(line)
 
     def __str__(self):

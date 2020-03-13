@@ -974,3 +974,4 @@ def get_rand():
         RANDOM = random.Random(time.time())
 
     return RANDOM
+

@@ -5,36 +5,19 @@ import sqlite3
 import codecs
 
 from dampr import Dampr
-
-def read_paths(path, suffix):
-    if not isinstance(path, list):
-        paths = [path]
-    else:
-        paths = path
-
-    def it():
-        for path_glob in paths:
-            for path in glob.glob(path_glob):
-                if os.path.isfile(path):
-                    yield path
-                else:
-                    for root, dirs, files in os.walk(path, followlinks=True):
-                        for fname in files:
-                            yield os.path.join(root, fname)
-
-    for fname in it():
-        if fname.endswith(suffix):
-            continue
-
-        yield fname
+from dampr.inputs import read_paths
 
 class Indexer(object):
     def __init__(self, path, suffix='.index'):
         self.path = path
         self.suffix = suffix
 
+    def get_idx(self, path):
+        dirname, base = os.path.split(path)
+        return os.path.join(dirname, "." + base + self.suffix)
+
     def exists(self, path):
-        return os.path.isfile(path + self.suffix)
+        return os.path.isfile(self.get_idx(path))
 
     def create_db(self, path):
         db = self.open_db(path, True)
@@ -43,14 +26,14 @@ class Indexer(object):
         return db
 
     def open_db(self, path, delete=False):
-        path = path + self.suffix
+        path = self.get_idx(path)
         if delete and os.path.isfile(path):
             os.unlink(path)
 
         return sqlite3.connect(path)
 
     def build(self, key_f, force=False):
-        paths = list(read_paths(self.path, self.suffix))
+        paths = list(read_paths(self.path, False))
         paths.sort()
 
         def index_file(fname):
@@ -95,6 +78,39 @@ class Indexer(object):
         query = """select distinct offset from key_index 
             where key in ({}) order by offset asc""".format(
                 ','.join('"{}"'.format(key) for key in keys))
+
+        def read_db(fname):
+            db = self.open_db(fname)
+
+            cur = db.cursor()
+            cur.execute(query)
+            with codecs.open(fname, encoding='utf-8') as f:
+                for (offset,) in cur:
+                    f.seek(offset)
+                    yield f.readline()
+
+        return Dampr.memory(paths).flat_map(read_db)
+
+    def intersect(self, keys, min_match=None):
+        if not isinstance(keys, (list, tuple)):
+            keys = [keys]
+
+        if min_match is None:
+            min_match = len(keys)
+
+        if isinstance(min_match, float):
+            min_match = int(min_match * len(keys))
+
+        paths = read_paths(self.path, self.suffix)
+
+        str_keys = u','.join(u'"{}"'.format(key) for key in keys)
+        query = u"""
+            select offset from 
+            (select offset, count(*) as c 
+                from key_index 
+                where key in ({}) 
+                group by offset) where c >= {}
+            order by offset asc""".format(str_keys, min_match)
 
         def read_db(fname):
             db = self.open_db(fname)

@@ -10,6 +10,25 @@ import os
 
 from .dataset import Chunker, TextLineDataset, GzipLineDataset, MemoryDataset, Dataset
 
+
+def read_paths(paths, follow_links):
+    if not isinstance(paths, list):
+        paths = [paths]
+
+    def it():
+        for path_glob in paths:
+            for path in glob.glob(path_glob):
+                if os.path.isfile(path):
+                    yield path
+
+                else:
+                    for root, dirs, files in os.walk(path, followlinks=follow_links):
+                        for fname in files:
+                            path = os.path.join(root, fname)
+                            yield path
+
+    return (p for p in it() if not os.path.basename(p).startswith('.'))
+
 class PathInput(Chunker):
     def __init__(self, path, chunk_size=64*1024**2, follow_links=True):
         self.path = path
@@ -17,24 +36,9 @@ class PathInput(Chunker):
         self.follow_links = follow_links
 
     def chunks(self):
-        if not isinstance(self.path, list):
-            paths = [self.path]
-        else:
-            paths = self.path
-
-        for path_glob in paths:
-            for path in glob.glob(path_glob):
-                if os.path.isfile(path):
-                    for c in TextInput(path, self.chunk_size).chunks():
-                        yield c
-
-                else:
-                    for root, dirs, files in os.walk(path, followlinks=self.follow_links):
-                        for fname in files:
-                            path = os.path.join(root, fname)
-                            for chunk in TextInput(path, self.chunk_size).chunks():
-                                yield chunk
-
+        for path in read_paths(self.path, self.follow_links):
+            for c in TextInput(path, self.chunk_size).chunks():
+                yield c
 
 class TextInput(Chunker):
     def __init__(self, path, chunk_size=64*1024**2):
