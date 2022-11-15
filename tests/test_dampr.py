@@ -4,6 +4,7 @@ import unittest
 
 from dampr import Dampr, BlockMapper, BlockReducer, Dataset, settings
 from dampr.inputs import UrlsInput
+from dampr.utils import filter_by_count
 
 class RangeDataset(Dataset):
     def __init__(self, n):
@@ -524,6 +525,24 @@ class DamprTest(unittest.TestCase):
         results.sort()
 
         self.assertEqual(results, list(zip(range(10,20), range(11, 21))))
+
+    def test_filter_min_count(self):
+        """
+        Tests filter min_count
+        """
+
+        # Lengths: 3,3,5,4,4,3,5,5,4
+        items = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten']
+        pipe = Dampr.memory(items)
+
+        # Greater than
+        results = filter_by_count(pipe, lambda line: len(line), lambda cnt: cnt >= 4).read()
+        results.sort()
+        self.assertEqual(results, sorted(['one', 'two', 'six', 'ten']))
+
+        results = filter_by_count(pipe, lambda line: len(line), lambda cnt: cnt < 4).read()
+        results.sort()
+        self.assertEqual(results, sorted(['three', 'four', 'five', 'seven', 'eight', 'nine']))
 
 
 if __name__ == '__main__':
