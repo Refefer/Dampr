@@ -1,7 +1,7 @@
 
 def filter_by_count(pipe, key_func, filter_func):
     """
-    Filters out items by minimum count of appearances
+    Filters out items by count of appearances
     """
 
     # Count the terms
@@ -13,3 +13,4 @@ def filter_by_count(pipe, key_func, filter_func):
             .join(pipe.group_by(key_func)) \
             .reduce(lambda lit, rit: rit, many=True) \
             .map(lambda x: x[1])
+

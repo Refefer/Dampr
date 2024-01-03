@@ -337,13 +337,13 @@ class ContiguousMemoryWriter(ContiguousWriter):
     Writes out data unordered into a Gzipped file
     """
     def get_fileobj(self):
-        self.buffer = StringIO()
-        return gzip.GzipFile(fileobj=self.buffer, 
+        self.buffer_file = StringIO()
+        return gzip.GzipFile(fileobj=self.buffer_file, 
                 mode='wb', 
                 compresslevel=settings.compress_level)
 
     def get_dataset(self):
-        return MemGZipDataset(self.buffer.getvalue(), True)
+        return MemGZipDataset(self.buffer_file.getvalue(), True)
 
 class UnorderedWriter(SimpleWriter):
     """
@@ -457,11 +457,18 @@ class TextLineDataset(Dataset):
 
     def read(self):
         with open(self.path, encoding='utf-8') as f:
-            f.seek(self.start)
+        #with open(self.path, encoding='iso-8859-1') as f:
             cur_pos = self.start
             if self.start > 0:
-                cur_pos += len(f.readline())
-
+                for alignment in (0, 1, 2, 3):
+                    try:
+                        f.seek(self.start - alignment)
+                        cur_pos += len(f.readline()) + alignment
+                        break
+                    except UnicodeDecodeError:
+                        pass
+                else:
+                    raise UnicodeDecodeError("Bad unicode starting at {}".format(self.start))
             for line in f:
                 yield cur_pos, line.rstrip(os.linesep)
                 cur_pos += len(line)
